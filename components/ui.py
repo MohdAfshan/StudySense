@@ -1,6 +1,7 @@
 import html
 import re
 
+from styles import FLASHCARD_IFRAME_CSS
 
 def esc(text):
     return html.escape(str(text))
@@ -110,6 +111,18 @@ def flashcard_surface(front, back, show_back):
         f'<div class="flashcard-face flashcard-back"><span>{back_text}</span></div>'
         '</div></div>'
     )
+
+
+def flashcard_iframe(front, back, show_back):
+    initial = "flipped" if show_back else ""
+    return f"""<style>{FLASHCARD_IFRAME_CSS}</style>
+    <div class="scene" onclick="this.firstElementChild.classList.toggle('flipped')">
+      <div class="card {initial}">
+        <div class="face front">{esc(front)}</div>
+        <div class="face back">{esc(back)}</div>
+      </div>
+    </div>
+    """
 
 
 def exchange(question, answer, pages, sources):

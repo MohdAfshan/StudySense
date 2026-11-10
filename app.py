@@ -5,6 +5,7 @@ import time
 import fitz  # PyMuPDF
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 
 import rag
 from components import ui
@@ -416,9 +417,12 @@ else:
                 f'<div class="deck-progress"><span style="width: '
                 f'{100 * (i + 1) / len(cards):.1f}%"></span></div>',
                 unsafe_allow_html=True)
-            st.markdown(ui.flashcard_surface(card["front"], card["back"],
-                                             st.session_state["show_back"]),
-                        unsafe_allow_html=True)
+            components.html(
+                ui.flashcard_iframe(card["front"], card["back"],
+                                    st.session_state["show_back"]),
+                height=255,
+                scrolling=False,
+            )
             b1, b2, b3 = st.columns(3)
             b1.button("Previous", on_click=prev_card, use_container_width=True)
             b2.button("Flip card", on_click=flip_card, use_container_width=True)

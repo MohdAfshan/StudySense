@@ -1,6 +1,23 @@
 import streamlit as st
 
 
+FLASHCARD_IFRAME_CSS = """
+:root { color-scheme: dark; }
+* { box-sizing: border-box; }
+body { margin: 0; background: transparent; font-family: sans-serif; }
+.scene { height: 245px; perspective: 1000px; cursor: pointer; }
+.card { position: relative; width: 100%; height: 100%;
+    transform-style: preserve-3d; transition: transform 600ms ease; }
+.card.flipped { transform: rotateY(180deg); }
+.face { position: absolute; inset: 0; display: grid; place-items: center;
+    padding: 2rem; border: 1px solid #f5d547; border-radius: 16px;
+    backface-visibility: hidden; text-align: center; font: 600 21px
+    "Bricolage Grotesque", sans-serif; }
+.front { background: #182532; color: #e7edf0; }
+.back { background: #f5d547; color: #101923; transform: rotateY(180deg); }
+"""
+
+
 STUDY_DESK_CSS = r"""
 @import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,600;12..96,700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
 

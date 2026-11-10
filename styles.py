@@ -88,6 +88,11 @@ html, body, [class*="css"] {
     font-family: var(--study-body);
 }
 
+[data-testid="stAppViewContainer"] button:focus,
+[data-testid="stAppViewContainer"] input:focus,
+[data-testid="stAppViewContainer"] textarea:focus,
+[data-testid="stAppViewContainer"] [role="tab"]:focus,
+[data-testid="stAppViewContainer"] [role="option"]:focus,
 button:focus-visible, input:focus-visible, textarea:focus-visible,
 [role="tab"]:focus-visible, [role="option"]:focus-visible,
 [data-baseweb="select"]:focus-within, [data-testid="stFileUploader"] section:focus-within {

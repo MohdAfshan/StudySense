@@ -1,6 +1,5 @@
 import os
 import tempfile
-import time
 
 import fitz  # PyMuPDF
 import pandas as pd
@@ -218,13 +217,10 @@ def render_ask_pipeline(stage, sources=None):
 def answer_question(q):
     try:
         render_ask_pipeline("embed")
-        time.sleep(0.18)
         render_ask_pipeline("search")
         ans, pages, sources = rag.ask(q, k=top_k, style=answer_style)
         render_ask_pipeline("retrieve", sources)
-        time.sleep(min(0.9, max(0.25, len(sources) * 0.14)))
         render_ask_pipeline("write", sources)
-        time.sleep(0.45)
         st.session_state["history"].insert(0, (q, ans, pages, sources))
         st.session_state["asked"] += 1
         render_ask_pipeline("done", sources)

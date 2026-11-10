@@ -94,7 +94,8 @@ def document_map(chunk_count, retrieved_indices=None, stage="idle"):
             classes.append("chunk-searching")
         if rank is not None:
             classes.append("chunk-retrieved")
-        delay = f"animation-delay: {index * 18}ms;"
+        delay_ms = rank * 140 if rank is not None else index * 18
+        delay = f"animation-delay: {delay_ms}ms;"
         label = f"<span>{rank}</span>" if rank is not None else ""
         chunks.append(
             f'<span class="{" ".join(classes)}" style="{delay}">{label}</span>'

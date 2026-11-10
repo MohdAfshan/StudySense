@@ -15,6 +15,9 @@ body { margin: 0; background: transparent; font-family: sans-serif; }
     "Bricolage Grotesque", sans-serif; }
 .front { background: #182532; color: #e7edf0; }
 .back { background: #f5d547; color: #101923; transform: rotateY(180deg); }
+@media (prefers-reduced-motion: reduce) {
+    .card { transition: none; }
+}
 """
 
 
@@ -83,6 +86,13 @@ STUDY_DESK_CSS = r"""
 
 html, body, [class*="css"] {
     font-family: var(--study-body);
+}
+
+button:focus-visible, input:focus-visible, textarea:focus-visible,
+[role="tab"]:focus-visible, [role="option"]:focus-visible,
+[data-baseweb="select"]:focus-within, [data-testid="stFileUploader"] section:focus-within {
+    outline: 2px solid var(--study-yellow) !important;
+    outline-offset: 3px;
 }
 
 body, .stApp, [data-testid="stAppViewContainer"] {
@@ -426,31 +436,8 @@ input:focus, textarea:focus, [data-baseweb="select"] > div:focus-within {
     font-size: 1.15rem;
 }
 
-.indexing-counts strong::after {
-    display: inline-block;
-    animation-duration: 900ms;
-    animation-timing-function: ease-out;
-    animation-fill-mode: forwards;
-}
-
-.indexing-counts .count-pages::after {
-    content: counter(page-count);
-    animation-name: count-pages;
-}
-
-.indexing-counts .count-chunks::after {
-    content: counter(chunk-count);
-    animation-name: count-chunks;
-}
-
-.indexing-counts .count-pages {
-    counter-reset: page-count var(--count-pages);
-    --count-pages: 0;
-}
-
-.indexing-counts .count-chunks {
-    counter-reset: chunk-count var(--count-chunks);
-    --count-chunks: 0;
+.indexing-counts strong {
+    animation: metric-count 800ms ease-out both;
 }
 
 .indexing-counts span {
@@ -631,14 +618,6 @@ input:focus, textarea:focus, [data-baseweb="select"] > div:focus-within {
 
 @keyframes ring-fill {
     from { --ring-progress: 0%; }
-}
-
-@keyframes count-pages {
-    to { --count-pages: var(--target-pages); }
-}
-
-@keyframes count-chunks {
-    to { --count-chunks: var(--target-chunks); }
 }
 
 @keyframes marker-pulse {
@@ -1672,17 +1651,12 @@ hr {
 @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after {
         scroll-behavior: auto !important;
-        transition-duration: 0.01ms !important;
-        animation-duration: 0.01ms !important;
-        animation-iteration-count: 1 !important;
+        transition: none !important;
+        animation: none !important;
     }
 
     .wordmark-sense::after {
         transform: scaleX(1);
-    }
-
-    .flashcard-3d {
-        transition: none;
     }
 }
 

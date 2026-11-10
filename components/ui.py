@@ -188,13 +188,10 @@ def terms_grid_end():
 
 
 def progress_metric(label, value, suffix=""):
-    if isinstance(value, int):
-        value_markup = (
-            f'<strong class="metric-number" style="--metric-target: {value};">'
-            f'<span>{suffix}</span></strong>'
-        )
-    else:
-        value_markup = f'<strong class="metric-static">{esc(value)}</strong>'
+    value_markup = (
+        f'<strong class="metric-number">{esc(value)}'
+        f'<span>{esc(suffix)}</span></strong>'
+    )
     return (
         f'<div class="progress-metric"><span class="progress-metric-label">{esc(label)}</span>'
         f'{value_markup}</div>'
@@ -251,8 +248,8 @@ def indexing_ring(pages, chunks):
         f'--target-pages: {int(pages)}; --target-chunks: {int(chunks)};">'
         '<span class="ring-check">OK</span></div>'
         '<div class="indexing-counts">'
-        '<div><strong class="count-pages"></strong><span>Pages</span></div>'
-        '<div><strong class="count-chunks"></strong><span>Chunks</span></div>'
+        f'<div><strong class="count-pages">{int(pages)}</strong><span>Pages</span></div>'
+        f'<div><strong class="count-chunks">{int(chunks)}</strong><span>Chunks</span></div>'
         '</div></div>'
     )
 

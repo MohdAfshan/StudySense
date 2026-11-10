@@ -1317,6 +1317,188 @@ hr {
     background: var(--study-surface);
 }
 
+.landing-intro {
+    padding: 2rem 0 1rem;
+}
+
+.landing-eyebrow {
+    color: var(--study-teal);
+    font-family: var(--study-mono);
+    font-size: 0.68rem;
+    letter-spacing: 0.14em;
+}
+
+.landing-intro h1 {
+    max-width: 39rem;
+    margin: 0.7rem 0 1.1rem;
+    font-size: clamp(2.6rem, 5vw, 4.5rem);
+    line-height: 0.98;
+}
+
+.landing-intro h1 span {
+    color: var(--study-yellow);
+}
+
+.landing-intro p {
+    max-width: 34rem;
+    color: var(--study-muted);
+    font-size: 1.05rem;
+    line-height: 1.65;
+}
+
+.landing-intro .landing-note {
+    margin-top: 1rem;
+    color: var(--study-text);
+    font-family: var(--study-mono);
+    font-size: 0.76rem;
+}
+
+.upload-zone {
+    min-height: 24rem;
+    padding: 2rem;
+    border: 1px dashed var(--study-border-strong);
+    border-radius: 18px;
+    background: var(--study-surface);
+    text-align: center;
+    transition: border-color 180ms ease, background 180ms ease;
+}
+
+.upload-zone:hover {
+    border-color: var(--study-yellow);
+    background: var(--study-surface-raised);
+}
+
+.upload-zone-art {
+    position: relative;
+    width: 9rem;
+    height: 9rem;
+    margin: 0 auto 1rem;
+}
+
+.paper {
+    position: absolute;
+    width: 5.2rem;
+    height: 6.7rem;
+    border: 1px solid var(--study-border-strong);
+    border-radius: 4px;
+    background: var(--study-surface-raised);
+    box-shadow: var(--study-shadow);
+}
+
+.paper-back {
+    top: 1rem;
+    left: 0.8rem;
+    transform: rotate(-16deg);
+    animation: paper-float 4s ease-in-out infinite;
+}
+
+.paper-middle {
+    top: 0.4rem;
+    left: 2rem;
+    transform: rotate(7deg);
+    animation: paper-float 4s ease-in-out 500ms infinite;
+}
+
+.paper-front {
+    top: 1rem;
+    left: 2rem;
+    display: grid;
+    place-content: center;
+    gap: 0.45rem;
+    border-color: var(--study-yellow);
+    background: var(--study-bg);
+    animation: paper-float 4s ease-in-out 1s infinite;
+}
+
+.paper-front span {
+    color: var(--study-yellow);
+    font-family: var(--study-mono);
+    font-size: 0.7rem;
+    font-weight: 600;
+}
+
+.paper-front i {
+    display: block;
+    width: 2.4rem;
+    height: 0.2rem;
+    border-radius: 2px;
+    background: var(--study-border-strong);
+}
+
+.upload-zone-copy {
+    display: grid;
+    gap: 0.35rem;
+}
+
+.upload-zone-copy strong {
+    font-family: var(--study-heading);
+    font-size: 1.35rem;
+}
+
+.upload-zone-copy span {
+    color: var(--study-muted);
+    font-size: 0.86rem;
+}
+
+.upload-zone-copy small {
+    margin-top: 0.8rem;
+    color: var(--study-teal);
+    font-family: var(--study-mono);
+    font-size: 0.68rem;
+}
+
+.upload-zone [data-testid="stFileUploader"] {
+    margin-top: 1rem;
+    text-align: left;
+}
+
+.landing-features {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 0.75rem;
+    margin-top: 2rem;
+}
+
+.landing-feature {
+    min-height: 9rem;
+    padding: 1rem;
+    border: 1px solid var(--study-border);
+    border-radius: var(--study-radius);
+    background: var(--study-surface);
+    transition: border-color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+}
+
+.landing-feature:hover {
+    border-color: var(--study-yellow);
+    box-shadow: var(--study-shadow);
+    transform: translateY(-4px);
+}
+
+.landing-feature-title {
+    color: var(--study-text);
+    font-family: var(--study-heading);
+    font-size: 1.05rem;
+}
+
+.landing-feature p {
+    min-height: 2.6rem;
+    margin: 0.45rem 0 0.9rem;
+    color: var(--study-muted);
+    font-size: 0.8rem;
+    line-height: 1.4;
+}
+
+.landing-feature > span {
+    color: var(--study-teal);
+    font-family: var(--study-mono);
+    font-size: 0.62rem;
+}
+
+@keyframes paper-float {
+    0%, 100% { margin-top: 0; }
+    50% { margin-top: -7px; }
+}
+
 .feature-card b {
     color: var(--study-yellow);
     font-family: var(--study-heading);
@@ -1505,6 +1687,14 @@ hr {
 }
 
 @media (max-width: 720px) {
+    .landing-features {
+        grid-template-columns: 1fr;
+    }
+
+    .upload-zone {
+        min-height: 20rem;
+    }
+
     .terms-grid {
         grid-template-columns: 1fr;
     }

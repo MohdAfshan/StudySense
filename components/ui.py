@@ -45,6 +45,34 @@ def feature_card(title, description):
     return f'<div class="feature-card"><b>{esc(title)}</b><br>{esc(description)}</div>'
 
 
+def landing_intro():
+    return (
+        '<section class="landing-intro"><div class="landing-eyebrow">YOUR LOCAL STUDY DESK</div>'
+        '<h1>Turn any PDF into a <span>study session</span></h1>'
+        '<p>StudySense turns your notes, textbooks and papers into a focused workspace '
+        'for asking questions, revising key ideas and testing what you know.</p>'
+        '<p class="landing-note">Everything stays local, so your study material never leaves your machine.</p>'
+        '</section>'
+    )
+
+
+def upload_zone():
+    return (
+        '<div class="upload-zone-art" aria-hidden="true">'
+        '<div class="paper paper-back"></div><div class="paper paper-middle"></div>'
+        '<div class="paper paper-front"><span>PDF</span><i></i><i></i><i></i></div>'
+        '</div><div class="upload-zone-copy"><strong>Drop a PDF here</strong>'
+        '<span>or choose a file below</span><small>Runs entirely on your machine</small></div>'
+    )
+
+
+def landing_feature(title, description, tag):
+    return (
+        f'<div class="landing-feature"><div class="landing-feature-title">{esc(title)}</div>'
+        f'<p>{esc(description)}</p><span>{esc(tag)}</span></div>'
+    )
+
+
 def source_chips(pages):
     return "".join(
         f'<span class="chip source-chip source-page-{esc(page)}" '

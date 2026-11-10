@@ -106,25 +106,6 @@ def render_document_map():
 with st.sidebar:
     st.markdown(ui.sidebar_wordmark(), unsafe_allow_html=True)
     st.header("Your Document")
-    file = st.file_uploader("Upload a PDF", type="pdf")
-
-    if file and st.session_state["loaded"] != file.name:
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as f:
-            f.write(file.getvalue())
-            path = f.name
-        n = 0
-        with st.spinner("Reading and indexing your PDF..."):
-            try:
-                n = rag.ingest(path)
-            except Exception as e:
-                st.error(f"Could not read this PDF: {e}")
-        if n > 0:
-            st.session_state.update(fresh_state())
-            st.session_state.update(loaded=file.name, chunks=n,
-                                    pages=rag.page_count, pdf_path=path)
-            st.toast("PDF ready!", icon="✅")
-        elif n == 0:
-            st.error("No readable text found. This may be a scanned PDF.")
 
     if st.session_state["loaded"]:
         st.markdown(
@@ -163,10 +144,54 @@ with st.sidebar:
         s2.metric("Quizzes", len(st.session_state["quiz_history"]))
 
 # ---------------------------------------------------------------- document map
+def ingest_uploaded_file(uploaded_file):
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as f:
+        f.write(uploaded_file.getvalue())
+        path = f.name
+    n = 0
+    with st.spinner("Reading and indexing your PDF..."):
+        try:
+            n = rag.ingest(path)
+        except Exception as e:
+            st.error(f"Could not read this PDF: {e}")
+    if n > 0:
+        st.session_state.update(fresh_state())
+        st.session_state.update(loaded=uploaded_file.name, chunks=n,
+                                pages=rag.page_count, pdf_path=path)
+        st.toast("PDF ready!", icon="✅")
+        st.rerun()
+    elif n == 0:
+        st.error("No readable text found. This may be a scanned PDF.")
+
+
 if st.session_state["loaded"]:
     render_document_map()
 else:
-    st.markdown(ui.document_map_header(0), unsafe_allow_html=True)
+    landing_left, landing_right = st.columns([1.05, 0.95], gap="large")
+    with landing_left:
+        st.markdown(ui.landing_intro(), unsafe_allow_html=True)
+    with landing_right:
+        st.markdown('<div class="upload-zone">', unsafe_allow_html=True)
+        st.markdown(ui.upload_zone(), unsafe_allow_html=True)
+        uploaded_file = st.file_uploader("Upload a PDF", type="pdf",
+                                         label_visibility="collapsed")
+        st.markdown("</div>", unsafe_allow_html=True)
+    if uploaded_file and st.session_state["loaded"] != uploaded_file.name:
+        ingest_uploaded_file(uploaded_file)
+
+    feature_specs = [
+        ("Ask", "Get grounded answers with page references.", "page refs + sources"),
+        ("Summarize", "Turn long material into focused revision notes.", "key ideas"),
+        ("Quiz", "Test your recall with generated questions.", "score + feedback"),
+        ("Flashcards", "Flip through prompts built from your document.", "active recall"),
+        ("Key terms", "Build a searchable glossary of important ideas.", "definitions"),
+    ]
+    st.markdown('<div class="landing-features">', unsafe_allow_html=True)
+    feature_columns = st.columns(5)
+    for column, spec in zip(feature_columns, feature_specs):
+        with column:
+            st.markdown(ui.landing_feature(*spec), unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
 
 # ---------------------------------------------------------------- helpers
 def render_ask_pipeline(stage, sources=None):
@@ -241,19 +266,7 @@ def render_page(path, page_no):
 
 
 # ---------------------------------------------------------------- main area
-if not st.session_state["loaded"]:
-    st.info("👈 Upload a PDF from the sidebar to get started.")
-    cols = st.columns(5)
-    cards = [
-        ("Ask", "Get answers with page references."),
-        ("Summarize", "Short, detailed or exam-revision style."),
-        ("Quiz", "Choose difficulty and page range, get scored."),
-        ("Flashcards", "Flip cards to memorize key ideas."),
-        ("Key Terms", "A searchable glossary of the document."),
-    ]
-    for col, (title, desc) in zip(cols, cards):
-        col.markdown(ui.feature_card(title, desc), unsafe_allow_html=True)
-else:
+if st.session_state["loaded"]:
     tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
         "Ask", "Summary", "Quiz", "Flashcards",
         "Key Terms", "Page Viewer", "Progress"])

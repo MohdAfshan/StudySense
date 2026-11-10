@@ -1,4 +1,5 @@
 import html
+import re
 
 
 def esc(text):
@@ -43,14 +44,43 @@ def feature_card(title, description):
     return f'<div class="feature-card"><b>{esc(title)}</b><br>{esc(description)}</div>'
 
 
-def source_card(text, page):
-    return (
-        f'<div class="source-card"><b>Page {esc(page)}</b><br>{esc(text)}</div>'
+def source_chips(pages):
+    return "".join(
+        f'<span class="chip source-chip source-page-{esc(page)}" '
+        f'data-page="{esc(page)}">Page {esc(page)}</span>' for page in pages
     )
 
 
-def source_chips(pages):
-    return "".join(f'<span class="chip">Page {esc(page)}</span>' for page in pages)
+def answer_text(answer):
+    return re.sub(
+        r"\(Page\s+(\d+)\)",
+        r'<span class="page-reference">Page \1</span>',
+        str(answer),
+        flags=re.IGNORECASE,
+    )
+
+
+def source_passage(text, page, rank, total):
+    strength = max(28, round(100 - ((rank - 1) / max(total, 1)) * 55))
+    return (
+        f'<div class="source-passage source-page-{esc(page)}">'
+        f'<div class="source-passage-meta"><span>Page {esc(page)}</span>'
+        f'<span>Rank {int(rank)}</span></div>'
+        f'<div class="similarity-track"><span style="width: {strength}%"></span></div>'
+        f'<div class="source-passage-text">{esc(text)}</div></div>'
+    )
+
+
+def exchange(question, answer, pages, sources):
+    return (
+        '<article class="ask-exchange">'
+        '<div class="question-label">YOU</div>'
+        f'<h3 class="ask-question">{esc(question)}</h3>'
+        f'<div class="ask-answer answer-fade">{answer_text(answer)}</div>'
+        f'<div class="ask-sources"><span class="sources-label">SOURCES</span>'
+        f'{source_chips(pages)}</div>'
+        '</article>'
+    )
 
 
 def flashcard(text, back=False):

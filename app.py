@@ -91,7 +91,8 @@ def render_document_map():
         for column, page in zip(columns, row_pages):
             with column:
                 st.markdown(
-                    f'<div class="page-map-item" style="--page-index: {page - 1};">'
+                    f'<div class="page-map-item page-map-page-{page}" '
+                    f'style="--page-index: {page - 1};">'
                     + ui.page_thumbnail(page, counts[page], max_chunks)
                     + '</div>',
                     unsafe_allow_html=True)
@@ -259,38 +260,43 @@ else:
     # ============================================================ Ask
     with tab1:
         with st.form("ask_form", clear_on_submit=True):
-            q = st.text_input("Ask anything about your document",
-                              placeholder="e.g. What is overfitting?")
-            asked = st.form_submit_button("Ask")
+            ask_col, ask_button_col = st.columns([5, 1])
+            q = ask_col.text_input("Ask anything about your document",
+                                   placeholder="e.g. What is overfitting?",
+                                   label_visibility="collapsed")
+            asked = ask_button_col.form_submit_button("Ask")
         if asked and q.strip():
             answer_question(q.strip())
 
         bc1, bc2, bc3 = st.columns([1, 1, 1])
-        if bc1.button("Suggest questions"):
+        if bc1.button("Suggest questions", use_container_width=True):
             with st.spinner("Thinking of questions..."):
                 try:
                     st.session_state["suggestions"] = rag.suggest_questions(5)
                 except Exception as e:
                     show_error(e)
+        if bc2.button("Clear chat", use_container_width=True) and st.session_state["history"]:
+            st.session_state["history"] = []
+            st.rerun()
         if st.session_state["history"]:
-            if bc2.button("Clear chat"):
-                st.session_state["history"] = []
-                st.rerun()
-            bc3.download_button("Download chat", chat_as_text(), file_name="studysense_chat.txt")
+            bc3.download_button("Download chat", chat_as_text(),
+                                file_name="studysense_chat.txt",
+                                use_container_width=True)
+        else:
+            bc3.button("Download chat", disabled=True, use_container_width=True)
 
+        if st.session_state["suggestions"]:
+            st.markdown('<div class="suggestions-anchor"></div>', unsafe_allow_html=True)
         for idx, sq in enumerate(st.session_state["suggestions"]):
             if st.button(sq, key=f"sq{idx}"):
                 answer_question(sq)
 
         for q_, ans_, pages_, sources_ in st.session_state["history"]:
-            with st.chat_message("user"):
-                st.write(q_)
-            with st.chat_message("assistant"):
-                st.markdown(ans_)
-                st.markdown("**Sources:** " + ui.source_chips(pages_), unsafe_allow_html=True)
-                with st.expander("View source passages"):
-                    for text, meta in sources_:
-                        st.markdown(ui.source_card(text, meta["page"]), unsafe_allow_html=True)
+            st.markdown(ui.exchange(q_, ans_, pages_, sources_), unsafe_allow_html=True)
+            with st.expander("View source passages"):
+                for rank, (text, meta) in enumerate(sources_, start=1):
+                    st.markdown(ui.source_passage(text, meta["page"], rank, len(sources_)),
+                                unsafe_allow_html=True)
 
     # ============================================================ Summary
     with tab2:

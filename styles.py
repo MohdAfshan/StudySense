@@ -790,21 +790,6 @@ hr {
     margin-right: 6px;
 }
 
-.source-card {
-    background: var(--study-surface-raised);
-    color: var(--study-text);
-    border: 1px solid var(--study-border);
-    padding: 0.8rem 1rem;
-    border-radius: 8px;
-    margin-bottom: 0.5rem;
-    font-size: 0.92rem;
-}
-
-.source-card b, .term-card .page-label {
-    color: var(--study-yellow);
-    font-family: var(--study-mono);
-}
-
 .flashcard {
     background: var(--study-surface);
     color: var(--study-text);
@@ -845,6 +830,145 @@ hr {
     font-family: var(--study-heading);
 }
 
+.ask-exchange {
+    padding: 1.4rem 0 1.6rem;
+    border-bottom: 1px solid var(--study-border);
+}
+
+.question-label, .sources-label {
+    color: var(--study-muted);
+    font-family: var(--study-mono);
+    font-size: 0.65rem;
+    letter-spacing: 0.12em;
+}
+
+.ask-question {
+    margin: 0.3rem 0 0.9rem;
+    color: var(--study-text);
+    font-size: 1.25rem;
+}
+
+.ask-answer {
+    color: var(--study-text);
+    line-height: 1.7;
+}
+
+.answer-fade {
+    animation: answer-fade 420ms ease-out both;
+}
+
+.page-reference {
+    display: inline-block;
+    padding: 0.05rem 0.35rem;
+    border-radius: 3px;
+    background: var(--study-yellow);
+    color: var(--study-bg);
+    font-family: var(--study-mono);
+    font-size: 0.78em;
+    font-weight: 600;
+}
+
+.ask-sources {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-top: 1rem;
+}
+
+.ask-sources .chip {
+    margin-right: 0;
+    cursor: default;
+}
+
+.source-passage {
+    margin: 0.7rem 0;
+    padding: 0.75rem 0.85rem;
+    border: 1px solid var(--study-border);
+    border-radius: 8px;
+    background: var(--study-surface-raised);
+    color: var(--study-text);
+    animation: answer-fade 420ms ease-out both;
+}
+
+.source-passage-meta {
+    display: flex;
+    justify-content: space-between;
+    color: var(--study-teal);
+    font-family: var(--study-mono);
+    font-size: 0.68rem;
+}
+
+.similarity-track {
+    height: 2px;
+    margin: 0.55rem 0 0.65rem;
+    overflow: hidden;
+    border-radius: 2px;
+    background: var(--study-border);
+}
+
+.similarity-track span {
+    display: block;
+    height: 100%;
+    background: var(--study-yellow);
+    transform-origin: left;
+    animation: similarity-grow 650ms ease-out both;
+}
+
+.source-passage-text {
+    color: var(--study-muted);
+    font-size: 0.86rem;
+    line-height: 1.5;
+}
+
+[data-testid="stTabs"] [data-testid="stFormSubmitButton"] button {
+    min-height: 2.45rem;
+}
+
+[data-testid="stTabs"] [data-testid="stButton"] button,
+[data-testid="stTabs"] [data-testid="stDownloadButton"] button {
+    border-color: var(--study-border-strong);
+    background: transparent;
+    color: var(--study-muted);
+    font-size: 0.82rem;
+}
+
+[data-testid="stTabs"] [data-testid="stButton"] button:hover,
+[data-testid="stTabs"] [data-testid="stDownloadButton"] button:hover {
+    border-color: var(--study-yellow);
+    background: var(--study-yellow-soft);
+    color: var(--study-yellow);
+}
+
+[data-testid="stTabs"] [data-testid="stExpander"] {
+    margin-top: 0.85rem;
+}
+
+.suggestions-anchor ~ div [data-testid="stButton"] button {
+    border-radius: 999px;
+    animation: suggestion-rise 400ms ease-out both;
+}
+
+.suggestions-anchor ~ div:nth-of-type(2) [data-testid="stButton"] button { animation-delay: 80ms; }
+.suggestions-anchor ~ div:nth-of-type(3) [data-testid="stButton"] button { animation-delay: 160ms; }
+.suggestions-anchor ~ div:nth-of-type(4) [data-testid="stButton"] button { animation-delay: 240ms; }
+.suggestions-anchor ~ div:nth-of-type(5) [data-testid="stButton"] button { animation-delay: 320ms; }
+
+@keyframes answer-fade {
+    from { opacity: 0; transform: translateY(5px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes suggestion-rise {
+    from { opacity: 0; transform: translateY(7px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes similarity-grow {
+    from { transform: scaleX(0); }
+    to { transform: scaleX(1); }
+}
+
 .footer {
     text-align: center;
     color: var(--study-muted);
@@ -882,4 +1006,13 @@ hr {
 
 
 def inject_styles():
-    st.markdown(f"<style>{STUDY_DESK_CSS}</style>", unsafe_allow_html=True)
+    page_hover_rules = "".join(
+        f".stApp:has(.source-page-{page}:hover) .page-map-page-{page} "
+        "{transform: translateY(-4px);}"
+        f".stApp:has(.source-page-{page}:hover) .page-map-page-{page} "
+        ".page-thumbnail {border-color: var(--study-yellow); "
+        "box-shadow: 0 7px 0 -3px var(--study-yellow);}"
+        for page in range(1, 501)
+    )
+    st.markdown(f"<style>{STUDY_DESK_CSS}{page_hover_rules}</style>",
+                unsafe_allow_html=True)

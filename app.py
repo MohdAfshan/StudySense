@@ -14,9 +14,6 @@ st.set_page_config(page_title="StudySense", page_icon="📚", layout="wide")
 
 inject_styles()
 
-st.markdown(ui.hero(), unsafe_allow_html=True)
-
-
 # ---------------------------------------------------------------- state
 def fresh_state():
     return {
@@ -59,6 +56,48 @@ def file_size(path):
 
 pipeline_placeholder = None
 document_map_placeholder = None
+
+
+def selected_page():
+    try:
+        page = int(st.query_params.get("page", "1"))
+    except (TypeError, ValueError):
+        return 1
+    return max(1, min(page, max(st.session_state["pages"], 1)))
+
+
+def page_chunk_counts():
+    counts = {page: 0 for page in range(1, st.session_state["pages"] + 1)}
+    for _, page in rag.all_chunks:
+        if page in counts:
+            counts[page] += 1
+    return counts
+
+
+def render_document_map():
+    counts = page_chunk_counts()
+    latest_sources = st.session_state["history"][0][3] if st.session_state["history"] else []
+    st.markdown(ui.document_map_header(len(latest_sources)), unsafe_allow_html=True)
+    if not counts:
+        st.markdown(ui.document_map_legend(), unsafe_allow_html=True)
+        return
+
+    max_chunks = max(counts.values(), default=0)
+    pages = list(counts)
+    columns_per_row = min(len(pages), 10)
+    for row_start in range(0, len(pages), columns_per_row):
+        row_pages = pages[row_start:row_start + columns_per_row]
+        columns = st.columns(columns_per_row)
+        for column, page in zip(columns, row_pages):
+            with column:
+                st.markdown(
+                    f'<div class="page-map-item" style="--page-index: {page - 1};">'
+                    + ui.page_thumbnail(page, counts[page], max_chunks)
+                    + '</div>',
+                    unsafe_allow_html=True)
+                if st.button(f"Open page {page}", key=f"page_map_{page}"):
+                    st.query_params["page"] = str(page)
+    st.markdown(ui.document_map_legend(), unsafe_allow_html=True)
 
 
 # ---------------------------------------------------------------- sidebar
@@ -120,6 +159,12 @@ with st.sidebar:
         s1, s2 = st.columns(2)
         s1.metric("Questions", st.session_state["asked"])
         s2.metric("Quizzes", len(st.session_state["quiz_history"]))
+
+# ---------------------------------------------------------------- document map
+if st.session_state["loaded"]:
+    render_document_map()
+else:
+    st.markdown(ui.document_map_header(0), unsafe_allow_html=True)
 
 # ---------------------------------------------------------------- helpers
 def render_ask_pipeline(stage, sources=None):
@@ -374,7 +419,8 @@ else:
     with tab6:
         st.caption("Check any page of your PDF, for example to verify the sources the AI cited.")
         total = st.session_state["pages"]
-        page_no = st.number_input("Page number", min_value=1, max_value=max(total, 1), value=1, step=1)
+        page_no = st.number_input("Page number", min_value=1, max_value=max(total, 1),
+                                  value=selected_page(), step=1)
         try:
             st.image(render_page(st.session_state["pdf_path"], int(page_no)), width=650)
         except Exception as e:

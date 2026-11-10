@@ -5,14 +5,38 @@ def esc(text):
     return html.escape(str(text))
 
 
-def hero():
-    return """
-    <div class="hero">
-      <h1>StudySense</h1>
-      <p>Your AI study partner. Upload a PDF, ask questions with page references,
-      get summaries, quizzes, flashcards and key terms.</p>
-    </div>
-    """
+def document_map_header(retrieved_count):
+    status = (
+        f'<div class="map-status"><span class="status-dot"></span>'
+        f'{int(retrieved_count)} passages retrieved</div>'
+    )
+    return (
+        '<div class="map-heading"><div><h1 class="map-wordmark">'
+        '<span>Study</span><span>Sense</span></h1>'
+        '<p>Turn your documents into understanding.</p></div>'
+        + status + '</div>'
+    )
+
+
+def page_thumbnail(page_number, chunk_count, max_chunks):
+    density = chunk_count / max_chunks if max_chunks else 0
+    first_width = 42 + round(density * 34)
+    second_width = 28 + round(density * 42)
+    return (
+        f'<div class="page-thumbnail" style="--page-density: {density:.2f};">'
+        f'<div class="page-fold"></div><div class="page-lines">'
+        f'<span style="width: {first_width}%"></span>'
+        f'<span style="width: {second_width}%"></span></div>'
+        f'<div class="page-number">{int(page_number)}</div></div>'
+    )
+
+
+def document_map_legend():
+    return (
+        '<div class="map-legend"><span><i class="legend-swatch"></i>'
+        'Indexed page</span><span><i class="legend-swatch legend-dense"></i>'
+        'Relative chunk density</span></div>'
+    )
 
 
 def feature_card(title, description):

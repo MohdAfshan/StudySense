@@ -183,7 +183,8 @@ input:focus, textarea:focus, [data-baseweb="select"] > div:focus-within {
     padding: 0.8rem 1rem;
 }
 
-[data-testid="stMetricLabel"], [data-testid="stMetricValue"] {
+[data-testid="stMetricLabel"], [data-testid="stMetricValue"],
+[data-testid="stCaptionContainer"] {
     font-family: var(--study-mono);
 }
 
@@ -258,7 +259,7 @@ hr {
 }
 
 .source-card b, .term-card .page-label {
-    color: var(--study-teal);
+    color: var(--study-yellow);
     font-family: var(--study-mono);
 }
 
@@ -276,14 +277,14 @@ hr {
 }
 
 .flashcard.back {
-    background: var(--study-teal-soft);
-    border-color: var(--study-teal);
+    background: var(--study-surface-raised);
+    border-color: var(--study-yellow);
 }
 
 .term-card {
     background: var(--study-surface);
     color: var(--study-text);
-    border-left: 4px solid var(--study-teal);
+    border-left: 4px solid var(--study-yellow);
     padding: 0.8rem 1.1rem;
     border-radius: 8px;
     margin-bottom: 0.6rem;

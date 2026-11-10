@@ -159,6 +159,39 @@ def terms_grid_end():
     return "</div>"
 
 
+def progress_metric(label, value, suffix=""):
+    if isinstance(value, int):
+        value_markup = (
+            f'<strong class="metric-number" style="--metric-target: {value};">'
+            f'<span>{suffix}</span></strong>'
+        )
+    else:
+        value_markup = f'<strong class="metric-static">{esc(value)}</strong>'
+    return (
+        f'<div class="progress-metric"><span class="progress-metric-label">{esc(label)}</span>'
+        f'{value_markup}</div>'
+    )
+
+
+def quiz_chart(history):
+    if not history:
+        return ""
+    bars = []
+    for index, item in enumerate(history):
+        score = max(0, min(100, int(item["Score %"])))
+        bars.append(
+            f'<div class="chart-column" style="--bar-height: {score}%; '
+            f'--bar-index: {index};"><span class="chart-value">{score}%</span>'
+            f'<div class="chart-bar"></div><span class="chart-label">Quiz {item["Quiz"]}</span></div>'
+        )
+    return (
+        '<div class="quiz-chart"><div class="chart-y-axis">'
+        '<span>100</span><span>75</span><span>50</span><span>25</span><span>0</span>'
+        '</div><div class="chart-plot"><div class="chart-grid"></div>'
+        '<div class="chart-bars">' + "".join(bars) + "</div></div></div>"
+    )
+
+
 def footer():
     return '<div class="footer">StudySense · Built with RAG, Streamlit and Ollama</div>'
 

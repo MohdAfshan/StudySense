@@ -75,6 +75,12 @@ STUDY_DESK_CSS = r"""
     initial-value: 0;
 }
 
+@property --metric-number {
+    syntax: "<integer>";
+    inherits: false;
+    initial-value: 0;
+}
+
 html, body, [class*="css"] {
     font-family: var(--study-body);
 }
@@ -1131,6 +1137,176 @@ hr {
     padding: 0.8rem 1.1rem;
     border-radius: 8px;
     margin-bottom: 0.6rem;
+}
+
+.progress-metric {
+    display: grid;
+    gap: 0.35rem;
+    padding: 1rem;
+    border: 1px solid var(--study-border);
+    border-radius: var(--study-radius);
+    background: var(--study-surface);
+}
+
+.progress-metric-label {
+    color: var(--study-muted);
+    font-family: var(--study-mono);
+    font-size: 0.68rem;
+    letter-spacing: 0.04em;
+}
+
+.progress-metric strong {
+    color: var(--study-text);
+    font-family: var(--study-heading);
+    font-size: 2rem;
+    line-height: 1;
+}
+
+.metric-number {
+    counter-reset: metric-number var(--metric-number);
+    animation: metric-count 800ms ease-out both;
+}
+
+.metric-number::before {
+    content: counter(metric-number);
+}
+
+.metric-number > span {
+    margin-left: 0.1rem;
+    color: var(--study-yellow);
+    font-family: var(--study-mono);
+    font-size: 0.8rem;
+}
+
+.quiz-chart {
+    display: flex;
+    min-height: 19rem;
+    margin: 1rem 0;
+    padding: 1rem 0.8rem 0.7rem 0;
+    border: 1px solid var(--study-border);
+    border-radius: var(--study-radius);
+    background: var(--study-surface);
+}
+
+.chart-y-axis {
+    display: flex;
+    width: 2.4rem;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 0 0.4rem 1.8rem 0;
+    color: var(--study-muted);
+    font-family: var(--study-mono);
+    font-size: 0.62rem;
+    text-align: right;
+}
+
+.chart-plot {
+    position: relative;
+    flex: 1;
+}
+
+.chart-grid {
+    position: absolute;
+    inset: 0 0 1.8rem;
+    background: repeating-linear-gradient(
+        to bottom,
+        var(--study-border) 0,
+        var(--study-border) 1px,
+        transparent 1px,
+        transparent 25%
+    );
+    opacity: 0.7;
+}
+
+.chart-bars {
+    position: absolute;
+    inset: 0 0 0;
+    display: flex;
+    align-items: end;
+    justify-content: space-around;
+    gap: 0.7rem;
+    padding: 0 0.8rem;
+}
+
+.chart-column {
+    position: relative;
+    display: flex;
+    height: 100%;
+    min-width: 2.5rem;
+    flex: 1;
+    flex-direction: column;
+    align-items: center;
+    justify-content: end;
+    gap: 0.35rem;
+}
+
+.chart-bar {
+    width: min(3.2rem, 75%);
+    height: var(--bar-height);
+    min-height: 2px;
+    border-radius: 4px 4px 0 0;
+    background: var(--study-yellow);
+    transform-origin: bottom;
+    animation: chart-grow 650ms ease-out both;
+    animation-delay: calc(var(--bar-index) * 90ms);
+}
+
+.chart-value, .chart-label {
+    font-family: var(--study-mono);
+    font-size: 0.65rem;
+}
+
+.chart-value {
+    color: var(--study-yellow);
+}
+
+.chart-label {
+    color: var(--study-muted);
+}
+
+.viewer-card {
+    padding: 0.8rem;
+    border: 1px solid var(--study-border);
+    border-radius: var(--study-radius);
+    background: var(--study-surface);
+}
+
+.viewer-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.8rem;
+}
+
+.viewer-controls [data-testid="stNumberInput"] {
+    max-width: 6rem;
+}
+
+.viewer-of {
+    color: var(--study-muted);
+    font-family: var(--study-mono);
+    font-size: 0.75rem;
+}
+
+.viewer-status {
+    margin-top: 0.7rem;
+    color: var(--study-muted);
+    font-family: var(--study-mono);
+    font-size: 0.7rem;
+}
+
+.viewer-status.retrieved {
+    color: var(--study-teal);
+}
+
+@keyframes metric-count {
+    from { --metric-number: 0; opacity: 0.2; transform: translateY(4px); }
+    to { --metric-number: var(--metric-target); opacity: 1; transform: translateY(0); }
+}
+
+@keyframes chart-grow {
+    from { transform: scaleY(0); }
+    to { transform: scaleY(1); }
 }
 
 .feature-card {

@@ -457,30 +457,64 @@ else:
     with tab6:
         st.caption("Check any page of your PDF, for example to verify the sources the AI cited.")
         total = st.session_state["pages"]
-        page_no = st.number_input("Page number", min_value=1, max_value=max(total, 1),
-                                  value=selected_page(), step=1)
-        try:
-            st.image(render_page(st.session_state["pdf_path"], int(page_no)), width=650)
-        except Exception as e:
-            st.error(f"Could not display this page: {e}")
+        page_no = selected_page()
+        viewer_left, viewer_right = st.columns([3, 1])
+        with viewer_right:
+            st.markdown('<div class="viewer-controls">', unsafe_allow_html=True)
+            minus, number, plus = st.columns([1, 2, 1])
+            if minus.button("-", key="viewer_minus", use_container_width=True):
+                st.query_params["page"] = str(max(1, page_no - 1))
+                st.rerun()
+            entered = number.number_input("Page", min_value=1, max_value=max(total, 1),
+                                          value=page_no, step=1,
+                                          label_visibility="collapsed")
+            if entered != page_no:
+                st.query_params["page"] = str(int(entered))
+                st.rerun()
+            if plus.button("+", key="viewer_plus", use_container_width=True):
+                st.query_params["page"] = str(min(max(total, 1), page_no + 1))
+                st.rerun()
+            st.markdown(f'<div class="viewer-of">of {total}</div>',
+                        unsafe_allow_html=True)
+            last_pages = st.session_state["history"][0][2] if st.session_state["history"] else []
+            if page_no in last_pages:
+                st.markdown('<div class="viewer-status retrieved">Retrieved for the last question</div>',
+                            unsafe_allow_html=True)
+            else:
+                st.markdown('<div class="viewer-status">Not retrieved for the last question</div>',
+                            unsafe_allow_html=True)
+        with viewer_left:
+            st.markdown('<div class="viewer-card">', unsafe_allow_html=True)
+            try:
+                st.image(render_page(st.session_state["pdf_path"], int(page_no)),
+                         use_container_width=True)
+            except Exception as e:
+                st.error(f"Could not display this page: {e}")
+            st.markdown("</div>", unsafe_allow_html=True)
 
     # ============================================================ Progress
     with tab7:
         hist = st.session_state["quiz_history"]
         m1, m2, m3, m4 = st.columns(4)
-        m1.metric("Questions asked", st.session_state["asked"])
-        m2.metric("Quizzes taken", len(hist))
+        m1.markdown(ui.progress_metric("QUESTIONS ASKED", st.session_state["asked"]),
+                    unsafe_allow_html=True)
+        m2.markdown(ui.progress_metric("QUIZZES TAKEN", len(hist)),
+                    unsafe_allow_html=True)
         if hist:
             avg = sum(h["Score %"] for h in hist) / len(hist)
-            m3.metric("Average score", f"{avg:.0f}%")
-            m4.metric("Best score", f"{max(h['Score %'] for h in hist)}%")
+            m3.markdown(ui.progress_metric("AVERAGE SCORE", round(avg), "%"),
+                        unsafe_allow_html=True)
+            m4.markdown(ui.progress_metric("BEST SCORE", max(h["Score %"] for h in hist), "%"),
+                        unsafe_allow_html=True)
             df = pd.DataFrame(hist)
             st.markdown("#### Quiz scores")
-            st.bar_chart(df.set_index("Quiz")["Score %"])
+            st.markdown(ui.quiz_chart(hist), unsafe_allow_html=True)
             st.dataframe(df, hide_index=True)
         else:
-            m3.metric("Average score", "-")
-            m4.metric("Best score", "-")
+            m3.markdown(ui.progress_metric("AVERAGE SCORE", "-"),
+                        unsafe_allow_html=True)
+            m4.markdown(ui.progress_metric("BEST SCORE", "-"),
+                        unsafe_allow_html=True)
             st.info("Take a quiz and your scores will appear here.")
 
 st.markdown(ui.footer(), unsafe_allow_html=True)

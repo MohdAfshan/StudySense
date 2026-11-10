@@ -1,4 +1,6 @@
+import os
 import tempfile
+import time
 
 import fitz  # PyMuPDF
 import pandas as pd
@@ -47,8 +49,21 @@ def show_error(e):
         st.code(msg[:1500])
 
 
+def file_size(path):
+    size = os.path.getsize(path)
+    for unit in ("B", "KB", "MB", "GB"):
+        if size < 1024 or unit == "GB":
+            return f"{size:.1f} {unit}" if unit != "B" else f"{int(size)} {unit}"
+        size /= 1024
+
+
+pipeline_placeholder = None
+document_map_placeholder = None
+
+
 # ---------------------------------------------------------------- sidebar
 with st.sidebar:
+    st.markdown(ui.sidebar_wordmark(), unsafe_allow_html=True)
     st.header("Your Document")
     file = st.file_uploader("Upload a PDF", type="pdf")
 
@@ -71,39 +86,79 @@ with st.sidebar:
             st.error("No readable text found. This may be a scanned PDF.")
 
     if st.session_state["loaded"]:
-        st.markdown(f"**File:** {st.session_state['loaded']}")
-        c1, c2 = st.columns(2)
-        c1.metric("Pages", st.session_state["pages"])
-        c2.metric("Chunks", st.session_state["chunks"])
+        st.markdown(
+            ui.document_card(st.session_state["loaded"],
+                             file_size(st.session_state["pdf_path"])),
+            unsafe_allow_html=True)
+        st.markdown(ui.indexing_ring(st.session_state["pages"],
+                                     st.session_state["chunks"]),
+                    unsafe_allow_html=True)
 
     st.divider()
-    st.subheader("Settings")
+    st.markdown('<div class="settings-label">SETTINGS</div>',
+                unsafe_allow_html=True)
     answer_style = st.selectbox("Answer style", list(rag.ANSWER_STYLES.keys()))
     top_k = st.slider("Passages to retrieve", 2, 8, 4,
-                      help="How many chunks of the PDF are sent to the AI for each question.")
+                      help="How many chunks of the PDF are sent to the AI for each question.",
+                      label_visibility="collapsed")
+    st.markdown("Passages to retrieve " + ui.passages_pill(top_k),
+                unsafe_allow_html=True)
+    st.markdown(
+        '<div class="settings-hint">More passages means more context.</div>',
+        unsafe_allow_html=True)
 
     if st.session_state["loaded"]:
+        pipeline_placeholder = st.empty()
+        document_map_placeholder = st.empty()
+        pipeline_placeholder.markdown(ui.pipeline(), unsafe_allow_html=True)
+        document_map_placeholder.markdown(
+            ui.document_map(st.session_state["chunks"]),
+            unsafe_allow_html=True)
         st.divider()
-        st.subheader("Your session")
+        st.markdown('<div class="settings-label">YOUR SESSION</div>',
+                    unsafe_allow_html=True)
         s1, s2 = st.columns(2)
         s1.metric("Questions", st.session_state["asked"])
         s2.metric("Quizzes", len(st.session_state["quiz_history"]))
 
-    st.divider()
-    st.markdown("**How it works**")
-    st.caption("1. PDF is split into chunks\n\n2. Chunks become embeddings\n\n"
-               "3. Best chunks are retrieved\n\n4. AI answers using only those chunks")
-
-
 # ---------------------------------------------------------------- helpers
+def render_ask_pipeline(stage, sources=None):
+    if pipeline_placeholder is None or document_map_placeholder is None:
+        return
+
+    retrieved_indices = {}
+    if sources:
+        used = set()
+        for rank, (text, meta) in enumerate(sources, start=1):
+            for index, (chunk, page) in enumerate(rag.all_chunks):
+                if index not in used and chunk == text and page == meta.get("page"):
+                    retrieved_indices[index] = rank
+                    used.add(index)
+                    break
+    pipeline_placeholder.markdown(
+        ui.pipeline(stage, len(sources) if sources else 0),
+        unsafe_allow_html=True)
+    document_map_placeholder.markdown(
+        ui.document_map(st.session_state["chunks"], retrieved_indices, stage),
+        unsafe_allow_html=True)
+
+
 def answer_question(q):
-    with st.spinner("Searching your document..."):
-        try:
-            ans, pages, sources = rag.ask(q, k=top_k, style=answer_style)
-            st.session_state["history"].insert(0, (q, ans, pages, sources))
-            st.session_state["asked"] += 1
-        except Exception as e:
-            show_error(e)
+    try:
+        render_ask_pipeline("embed")
+        time.sleep(0.18)
+        render_ask_pipeline("search")
+        ans, pages, sources = rag.ask(q, k=top_k, style=answer_style)
+        render_ask_pipeline("retrieve", sources)
+        time.sleep(min(0.9, max(0.25, len(sources) * 0.14)))
+        render_ask_pipeline("write", sources)
+        time.sleep(0.45)
+        st.session_state["history"].insert(0, (q, ans, pages, sources))
+        st.session_state["asked"] += 1
+        render_ask_pipeline("done", sources)
+    except Exception as e:
+        render_ask_pipeline("idle")
+        show_error(e)
 
 
 def chat_as_text():

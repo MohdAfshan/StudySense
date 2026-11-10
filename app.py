@@ -334,14 +334,21 @@ else:
         quiz = st.session_state["quiz"]
         if quiz:
             qid = st.session_state["quiz_id"]
+            current_answers = [
+                st.session_state.get(f"q{qid}_{i}") for i in range(len(quiz))
+            ]
+            st.markdown(ui.quiz_progress(quiz, current_answers), unsafe_allow_html=True)
             with st.form(f"quiz_form_{qid}"):
                 answers = []
                 for i, item in enumerate(quiz):
-                    st.markdown(f"**Q{i+1}. {item['question']}**")
+                    st.markdown(
+                        f'<div class="quiz-card"><div class="quiz-number">QUESTION {i + 1}</div>'
+                        f'<h3>{ui.esc(item["question"])}</h3>',
+                        unsafe_allow_html=True)
                     answers.append(st.radio("Choose one", item["options"],
                                             key=f"q{qid}_{i}", index=None,
                                             label_visibility="collapsed"))
-                    st.write("")
+                    st.markdown("</div>", unsafe_allow_html=True)
                 submitted = st.form_submit_button("Submit Answers")
 
             if submitted:
@@ -359,18 +366,30 @@ else:
             if st.session_state["result"] is not None:
                 result = st.session_state["result"]
                 score = compute_score(quiz, result)
+                st.markdown('<div class="quiz-result">', unsafe_allow_html=True)
+                st.markdown(ui.quiz_score_ring(score, len(quiz)), unsafe_allow_html=True)
                 st.markdown(f"## Score: {score} / {len(quiz)}")
-                st.progress(score / len(quiz))
                 for i, item in enumerate(quiz):
                     chosen = result[i]
+                    st.markdown(ui.quiz_option_review(item, chosen),
+                                unsafe_allow_html=True)
                     if chosen == item["answer"]:
-                        st.success(f"Q{i+1}: Correct (Page {item['page']})")
+                        st.markdown(
+                            f'<div class="quiz-feedback correct"><b>Q{i + 1}: Correct</b>'
+                            f'<span>Page {ui.esc(item["page"])}</span></div>',
+                            unsafe_allow_html=True)
                     else:
                         shown = chosen if chosen else "Not answered"
-                        st.error(f"Q{i+1}: Wrong. You chose: {shown}\n\n"
-                                 f"Correct answer: {item['answer']} (Page {item['page']})")
+                        st.markdown(
+                            f'<div class="quiz-feedback wrong"><b>Q{i + 1}: Wrong</b>'
+                            f'<span>You chose: {ui.esc(shown)} · Correct: '
+                            f'{ui.esc(item["answer"])} · Page {ui.esc(item["page"])}</span></div>',
+                            unsafe_allow_html=True)
                     if item["explanation"]:
-                        st.caption(item["explanation"])
+                        st.markdown(
+                            f'<div class="quiz-explanation">{ui.esc(item["explanation"])}</div>',
+                            unsafe_allow_html=True)
+                st.markdown("</div>", unsafe_allow_html=True)
 
     # ============================================================ Flashcards
     with tab4:
@@ -390,11 +409,16 @@ else:
         if cards:
             i = st.session_state["card_i"]
             card = cards[i]
-            st.caption(f"Card {i + 1} of {len(cards)}  ·  Page {card['page']}")
-            if st.session_state["show_back"]:
-                st.markdown(ui.flashcard(card["back"], back=True), unsafe_allow_html=True)
-            else:
-                st.markdown(ui.flashcard(card["front"]), unsafe_allow_html=True)
+            st.markdown(
+                f'<div class="deck-meta">Card {i + 1} of {len(cards)} · Page {card["page"]}</div>',
+                unsafe_allow_html=True)
+            st.markdown(
+                f'<div class="deck-progress"><span style="width: '
+                f'{100 * (i + 1) / len(cards):.1f}%"></span></div>',
+                unsafe_allow_html=True)
+            st.markdown(ui.flashcard_surface(card["front"], card["back"],
+                                             st.session_state["show_back"]),
+                        unsafe_allow_html=True)
             b1, b2, b3 = st.columns(3)
             b1.button("Previous", on_click=prev_card, use_container_width=True)
             b2.button("Flip card", on_click=flip_card, use_container_width=True)
@@ -415,9 +439,13 @@ else:
             search = st.text_input("Search terms", placeholder="type to filter...")
             shown = [t for t in terms
                      if search.lower() in t["term"].lower() or search.lower() in t["definition"].lower()]
-            for t in shown:
-                st.markdown(ui.term_card(t["term"], t["page"], t["definition"]),
-                            unsafe_allow_html=True)
+            st.markdown(ui.terms_grid_start(), unsafe_allow_html=True)
+            term_columns = st.columns(3)
+            for index, t in enumerate(shown):
+                with term_columns[index % 3]:
+                    st.markdown(ui.term_card(t["term"], t["page"], t["definition"]),
+                                unsafe_allow_html=True)
+            st.markdown(ui.terms_grid_end(), unsafe_allow_html=True)
             glossary = "\n".join(f"{t['term']} (Page {t['page']}): {t['definition']}" for t in terms)
             st.download_button("Download glossary", glossary, file_name="glossary.txt")
 

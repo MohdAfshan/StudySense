@@ -71,6 +71,47 @@ def source_passage(text, page, rank, total):
     )
 
 
+def quiz_progress(quiz, answers):
+    segments = []
+    for index in range(len(quiz)):
+        state = "filled" if index < len(answers) and answers[index] is not None else ""
+        segments.append(f'<span class="quiz-segment {state}"></span>')
+    return '<div class="quiz-progress">' + "".join(segments) + "</div>"
+
+
+def quiz_score_ring(score, total):
+    percent = round(100 * score / total) if total else 0
+    return (
+        f'<div class="score-ring" style="--score: {percent * 3.6}deg;">'
+        f'<div><strong>{percent}%</strong><span>Score</span></div></div>'
+    )
+
+
+def quiz_option_review(item, chosen):
+    rows = []
+    for index, option in enumerate(item["options"]):
+        state = "correct-option" if option == item["answer"] else ""
+        if chosen == option and option != item["answer"]:
+            state = "wrong-option"
+        rows.append(
+            f'<div class="quiz-option-review {state}">'
+            f'<span>{chr(65 + index)}</span>{esc(option)}</div>'
+        )
+    return "".join(rows)
+
+
+def flashcard_surface(front, back, show_back):
+    front_text = esc(front)
+    back_text = esc(back)
+    flipped = " flipped" if show_back else ""
+    return (
+        f'<div class="flashcard-scene"><div class="flashcard-3d{flipped}">'
+        f'<div class="flashcard-face flashcard-front"><span>{front_text}</span></div>'
+        f'<div class="flashcard-face flashcard-back"><span>{back_text}</span></div>'
+        '</div></div>'
+    )
+
+
 def exchange(question, answer, pages, sources):
     return (
         '<article class="ask-exchange">'
@@ -95,6 +136,14 @@ def term_card(term, page, definition):
         f'<span class="chip page-label">Page {esc(page)}</span><br>'
         f'{esc(definition)}</div>'
     )
+
+
+def terms_grid_start():
+    return '<div class="terms-grid">'
+
+
+def terms_grid_end():
+    return "</div>"
 
 
 def footer():

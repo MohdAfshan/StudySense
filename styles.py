@@ -242,6 +242,7 @@ input:focus, textarea:focus, [data-baseweb="select"] > div:focus-within {
 
 .wordmark-sense {
     position: relative;
+    z-index: 0;
     color: var(--study-text);
 }
 
@@ -311,6 +312,7 @@ input:focus, textarea:focus, [data-baseweb="select"] > div:focus-within {
 }
 
 .progress-ring {
+    position: relative;
     display: grid;
     width: 4.2rem;
     height: 4.2rem;

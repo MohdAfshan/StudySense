@@ -1,10 +1,10 @@
 [theme]
 base = "dark"
-primaryColor = "#f5d547"
-backgroundColor = "#101923"
-secondaryBackgroundColor = "#182532"
-textColor = "#e7edf0"
+primaryColor = "#4fc9bf"
+backgroundColor = "#0d1218"
+secondaryBackgroundColor = "#141c25"
+textColor = "#e9eef3"
 font = "sans serif"
 
-[server]
-enableXsrfProtection = true
+[browser]
+gatherUsageStats = false

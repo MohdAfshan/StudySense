@@ -1,318 +1,260 @@
+"""HTML builders for StudySense. Every function returns a single compact HTML string
+(no blank lines, no indentation) so Streamlit's markdown parser leaves it untouched."""
 import html
+import json
 import re
 
-from styles import FLASHCARD_IFRAME_CSS
 
 def esc(text):
     return html.escape(str(text))
 
 
-def document_map_header(retrieved_count):
-    status = (
-        f'<div class="map-status"><span class="status-dot"></span>'
-        f'{int(retrieved_count)} passages retrieved</div>'
-    )
-    return (
-        '<div class="map-heading"><div><h1 class="map-wordmark">'
-        '<span>Study</span><span>Sense</span></h1>'
-        '<p>Turn your documents into understanding.</p></div>'
-        + status + '</div>'
-    )
+def one(text):
+    """Collapse whitespace/newlines so passage text is safe inside an HTML block."""
+    return re.sub(r"\s+", " ", str(text)).strip()
 
 
-def page_thumbnail(page_number, chunk_count, max_chunks):
-    density = chunk_count / max_chunks if max_chunks else 0
-    first_width = 42 + round(density * 34)
-    second_width = 28 + round(density * 42)
-    return (
-        f'<div class="page-thumbnail" style="--page-density: {density:.2f};">'
-        f'<div class="page-fold"></div><div class="page-lines">'
-        f'<span style="width: {first_width}%"></span>'
-        f'<span style="width: {second_width}%"></span></div>'
-        f'<div class="page-number">{int(page_number)}</div></div>'
-    )
+# ---------------------------------------------------------------- sidebar
+def wordmark():
+    return '<div class="brand">Study<span class="hl">Sense</span></div>'
 
 
-def document_map_legend():
-    return (
-        '<div class="map-legend"><span><i class="legend-swatch"></i>'
-        'Indexed page</span><span><i class="legend-swatch legend-dense"></i>'
-        'Relative chunk density</span></div>'
-    )
+def doc_card(name, size_kb=None):
+    size = f'<div class="label" style="margin-top:7px">{size_kb:.1f} KB</div>' if size_kb else ""
+    return (f'<div class="doccard"><div class="pdfico">PDF</div>'
+            f'<div><div class="fname">{esc(name)}</div>{size}</div></div>')
 
 
-def feature_card(title, description):
-    return f'<div class="feature-card"><b>{esc(title)}</b><br>{esc(description)}</div>'
+def empty_doc_card():
+    return ('<div class="doccard"><div class="pdfico">PDF</div><div><div class="fname">No file yet</div>'
+            '<div class="label" style="margin-top:7px">PDF with a text layer</div></div></div>')
 
 
-def landing_intro():
-    return (
-        '<section class="landing-intro"><div class="landing-eyebrow">YOUR LOCAL STUDY DESK</div>'
-        '<h1>Turn any PDF into a <span>study session</span></h1>'
-        '<p>StudySense turns your notes, textbooks and papers into a focused workspace '
-        'for asking questions, revising key ideas and testing what you know.</p>'
-        '<p class="landing-note">Everything stays local, so your study material never leaves your machine.</p>'
-        '</section>'
-    )
+def ring_stats(pages, chunks):
+    return ('<div class="ringrow"><svg class="ring" viewBox="0 0 84 84" aria-hidden="true">'
+            '<circle class="t" cx="42" cy="42" r="34"/><circle class="v" cx="42" cy="42" r="34"/></svg>'
+            f'<div class="stats"><div class="stat"><span class="label">Pages</span><b>{pages}</b></div>'
+            f'<div class="stat"><span class="label">Chunks</span><b>{chunks}</b></div></div></div>')
 
 
-def upload_zone():
-    return (
-        '<div class="upload-zone-art" aria-hidden="true">'
-        '<div class="paper paper-back"></div><div class="paper paper-middle"></div>'
-        '<div class="paper paper-front"><span>PDF</span><i></i><i></i><i></i></div>'
-        '</div><div class="upload-zone-copy"><strong>Drop a PDF here</strong>'
-        '<span>or choose a file below</span><small>Runs entirely on your machine</small></div>'
-    )
+def session_stats(asked, quizzes):
+    return ('<div class="stats" style="margin-top:6px">'
+            f'<div class="stat"><span class="label">Questions</span><b>{asked}</b></div>'
+            f'<div class="stat"><span class="label">Quizzes</span><b>{quizzes}</b></div></div>')
 
 
-def landing_feature(title, description, tag):
-    return (
-        f'<div class="landing-feature"><div class="landing-feature-title">{esc(title)}</div>'
-        f'<p>{esc(description)}</p><span>{esc(tag)}</span></div>'
-    )
+def label(text):
+    return f'<div class="label sidehead">{esc(text)}</div>'
+
+
+def passages_pill(k):
+    return (f'<div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px">'
+            f'<span style="font-size:13px;color:var(--muted)">Passages to retrieve</span><span class="kval">{k}</span></div>')
+
+
+def pipeline(state, chunks, k):
+    """state: -1 idle, 0..3 = that step is active, 4 = everything done."""
+    steps = [("Embed the question", "all-MiniLM-L6-v2"),
+             ("Search the chunks", f"ChromaDB · {chunks} chunks"),
+             ("Retrieve the best passages", f"top {k} by similarity"),
+             ("Write the answer", "llama3.1:8b on Ollama")]
+    items = []
+    for i, (title, sub) in enumerate(steps):
+        cls = "done" if i < state else ("active" if i == state else "pending")
+        items.append(f'<li class="{cls}"><b>{title}</b><span>{sub}</span></li>')
+    return f'<ol class="flow">{"".join(items)}</ol>'
+
+
+# ---------------------------------------------------------------- hero + document map
+def docmap(pages, chunks, hits, mode="idle"):
+    """hits: ordered list of page numbers (rank 1 first). mode: idle | searching | boot."""
+    per = max(1, min(3, round(chunks / pages))) if pages else 1
+    ranks = {}
+    for r, p in enumerate(hits, 1):
+        ranks.setdefault(int(p), []).append(r)
+    cells = []
+    for p in range(1, pages + 1):
+        rk = ranks.get(p, [])
+        cks = []
+        for i in range(per):
+            if i < len(rk):
+                cks.append(f'<i class="ck hit" style="--i:{p + i}"><span>{rk[i]}</span></i>')
+            else:
+                cks.append(f'<i class="ck" style="--i:{p + i}"></i>')
+        cls = "pgn hit" if rk else "pgn"
+        cells.append(f'<div class="pg" style="--i:{p - 1}"><div class="pgbox">{"".join(cks)}</div><span class="{cls}">{p}</span></div>')
+    extra = {"searching": " searching", "boot": " boot"}.get(mode, "")
+    legend = ('<div class="legend"><span><i style="background:var(--surface2);border:1px solid var(--line)"></i>chunk being indexed</span>'
+              '<span><i style="background:color-mix(in srgb,var(--accent) 45%,var(--surface));box-shadow:0 0 0 1px var(--accent)"></i>'
+              'retrieved for the current question, numbered by rank</span></div>')
+    return f'<div class="strip{extra}" aria-label="Document map">{"".join(cells)}</div>{legend}'
+
+
+def hero(status):
+    return ('<div class="hero"><div class="herotop"><div><h1>Study<span class="hl">Sense</span></h1>'
+            '<p>Your AI study partner. Every answer is traced back to the pages it came from.</p></div>'
+            f'<div class="hitlabel"><i></i><span>{esc(status)}</span></div></div></div>')
+
+
+# ---------------------------------------------------------------- empty state
+def empty_headline():
+    return ('<div class="emptyh1">Turn any PDF into a <span class="hl">study session</span></div>'
+            '<p class="muted" style="max-width:48ch;font-size:1.02rem">Upload your notes or a textbook chapter. '
+            'StudySense reads it page by page, then answers with page references, writes summaries and builds '
+            'quizzes, flashcards and a glossary from the same text.</p>'
+            '<p class="mono muted" style="font-size:12.5px;margin-top:16px">Runs locally with Ollama. Your document never leaves this machine.</p>')
+
+
+def drop_copy():
+    return ('<div class="dropcopy"><div class="floaters"><i></i><i></i><i></i></div>'
+            '<h3>Drop a PDF here</h3></div>')
+
+
+def feature_cards():
+    cards = [("Ask", "Answers that cite the page they came from.", "page refs + sources"),
+             ("Summarize", "Short, detailed or exam revision style.", "page range"),
+             ("Quiz", "Pick difficulty, get scored on the spot.", "easy · medium · hard"),
+             ("Flashcards", "Flip through cards to memorize key ideas.", "front / back"),
+             ("Key terms", "A searchable glossary of your document.", "downloadable")]
+    return '<div class="feat">' + "".join(
+        f'<div><b>{t}</b><span>{d}</span><em>{tag}</em></div>' for t, d, tag in cards) + '</div>'
+
+
+# ---------------------------------------------------------------- ask
+_REF = re.compile(r"\(\s*pages?\s*([0-9][0-9,\s\-–and&]*)\)", re.I)
+
+
+def answer_md(text):
+    """Turn '(Page 6)' / '(Pages 3, 5)' into small teal tags. Everything else stays markdown."""
+    def sub(m):
+        nums = re.findall(r"\d+", m.group(1))
+        return " ".join(f'<span class="pgtag">p.{n}</span>' for n in nums)
+    return _REF.sub(sub, str(text))
+
+
+def question_block(q):
+    return f'<div class="msgstart"><span class="label">You</span><div class="qtext">{esc(q)}</div></div>'
+
+
+def thinking(text):
+    return f'<div class="think"><span class="dots"><i></i><i></i><i></i></span><span>{esc(text)}</span></div>'
 
 
 def source_chips(pages):
-    return "".join(
-        f'<span class="chip source-chip source-page-{esc(page)}" '
-        f'data-page="{esc(page)}">Page {esc(page)}</span>' for page in pages
-    )
+    uniq = sorted({int(p) for p in pages})
+    chips = "".join(f'<span class="chip" style="animation-delay:{i * 90}ms">Page {p}</span>' for i, p in enumerate(uniq))
+    return f'<div class="chips"><span class="label" style="margin-right:4px">Sources</span>{chips}</div>'
 
 
-def answer_text(answer):
-    return re.sub(
-        r"\(Page\s+(\d+)\)",
-        r'<span class="page-reference">Page \1</span>',
-        str(answer),
-        flags=re.IGNORECASE,
-    )
+def source_cards(sources):
+    out = []
+    for i, (text, meta) in enumerate(sources, 1):
+        out.append(f'<div class="pass"><div class="pmeta"><b>Page {esc(meta.get("page", "?"))}</b>'
+                   f'<span class="rk">rank {i}</span></div><div>{esc(one(text))}</div></div>')
+    return "".join(out)
 
 
-def source_passage(text, page, rank, total):
-    strength = max(28, round(100 - ((rank - 1) / max(total, 1)) * 55))
-    return (
-        f'<div class="source-passage source-page-{esc(page)}">'
-        f'<div class="source-passage-meta"><span>Page {esc(page)}</span>'
-        f'<span>Rank {int(rank)}</span></div>'
-        f'<div class="similarity-track"><span style="width: {strength}%"></span></div>'
-        f'<div class="source-passage-text">{esc(text)}</div></div>'
-    )
+# ---------------------------------------------------------------- quiz
+def quiz_head(i, item):
+    return (f'<div class="qhead"><span class="label">Q{i + 1} · Page {esc(item.get("page", "?"))}</span>'
+            f'<h3>{esc(item["question"])}</h3></div>')
 
 
-def quiz_progress(quiz, answers):
-    segments = []
-    for index in range(len(quiz)):
-        state = "filled" if index < len(answers) and answers[index] is not None else ""
-        segments.append(f'<span class="quiz-segment {state}"></span>')
-    return '<div class="quiz-progress">' + "".join(segments) + "</div>"
+def quiz_result(score, total, quiz, answers):
+    off = 213.6 * (1 - (score / total if total else 0))
+    reviews = []
+    for i, item in enumerate(quiz):
+        chosen = answers[i]
+        ok = chosen == item["answer"]
+        verdict = '<b class="ok">Correct</b>' if ok else '<b class="no">Not quite</b>'
+        extra = "" if ok else f'<div>You chose: {esc(chosen) if chosen else "Not answered"}. Correct answer: <b>{esc(item["answer"])}</b></div>'
+        ex = f'<div class="ex">{esc(item["explanation"])}</div>' if item.get("explanation") else ""
+        reviews.append(f'<div class="rev {"ok" if ok else "no"}"><div>{verdict} · Q{i + 1} · Page {esc(item.get("page", "?"))}</div>{extra}{ex}</div>')
+    return ('<div class="result"><svg class="ring" viewBox="0 0 84 84" aria-hidden="true">'
+            f'<circle class="t" cx="42" cy="42" r="34"/><circle class="v" cx="42" cy="42" r="34" style="--off:{off:.1f};stroke:var(--good)"/></svg>'
+            f'<div><div class="label">Your score</div><div class="score">{score} / {total}</div></div></div>'
+            + "".join(reviews))
 
 
-def quiz_score_ring(score, total):
-    percent = round(100 * score / total) if total else 0
-    return (
-        f'<div class="score-ring" style="--score: {percent * 3.6}deg;">'
-        f'<div><strong>{percent}%</strong><span>Score</span></div></div>'
-    )
+# ---------------------------------------------------------------- key terms
+def term_cards(terms):
+    if not terms:
+        return '<div class="hint">No terms match that search.</div>'
+    cards = "".join(
+        f'<div class="term" style="animation-delay:{i * 60}ms"><div class="tt">{esc(t["term"])}<span class="pgtag">p.{esc(t["page"])}</span></div>'
+        f'<p>{esc(t["definition"])}</p></div>' for i, t in enumerate(terms))
+    return f'<div class="terms">{cards}</div>'
 
 
-def quiz_option_review(item, chosen):
-    rows = []
-    for index, option in enumerate(item["options"]):
-        state = "correct-option" if option == item["answer"] else ""
-        if chosen == option and option != item["answer"]:
-            state = "wrong-option"
-        rows.append(
-            f'<div class="quiz-option-review {state}">'
-            f'<span>{chr(65 + index)}</span>{esc(option)}</div>'
-        )
-    return "".join(rows)
+# ---------------------------------------------------------------- progress
+def metrics(asked, quizzes, avg, best):
+    def m(lbl, val):
+        return f'<div class="metric"><span class="label">{lbl}</span><b>{val}</b></div>'
+    return ('<div class="metrics">' + m("Questions asked", asked) + m("Quizzes taken", quizzes)
+            + m("Average score", avg) + m("Best score", best) + '</div>')
 
 
-def flashcard_surface(front, back, show_back):
-    front_text = esc(front)
-    back_text = esc(back)
-    flipped = " flipped" if show_back else ""
-    return (
-        f'<div class="flashcard-scene"><div class="flashcard-3d{flipped}">'
-        f'<div class="flashcard-face flashcard-front"><span>{front_text}</span></div>'
-        f'<div class="flashcard-face flashcard-back"><span>{back_text}</span></div>'
-        '</div></div>'
-    )
+def bar_chart(scores):
+    bars = "".join(f'<div class="bar" style="--v:{s};--n:{i}"><em>{s}%</em><u>Quiz {i + 1}</u></div>' for i, s in enumerate(scores))
+    return ('<div class="label" style="margin-top:22px">Quiz scores</div><div class="chart"><div class="yax">'
+            '<span>100</span><span>75</span><span>50</span><span>25</span><span>0</span></div>'
+            f'<div class="plot">{bars}</div></div>')
 
 
-def flashcard_iframe(front, back, show_back):
-    initial = "flipped" if show_back else ""
-    return f"""<style>{FLASHCARD_IFRAME_CSS}</style>
-    <div class="scene" onclick="this.firstElementChild.classList.toggle('flipped')">
-      <div class="card {initial}">
-        <div class="face front">{esc(front)}</div>
-        <div class="face back">{esc(back)}</div>
-      </div>
-    </div>
-    """
-
-
-def exchange(question, answer, pages, sources):
-    return (
-        '<article class="ask-exchange">'
-        '<div class="question-label">YOU</div>'
-        f'<h3 class="ask-question">{esc(question)}</h3>'
-        f'<div class="ask-answer answer-fade">{answer_text(answer)}</div>'
-        f'<div class="ask-sources"><span class="sources-label">SOURCES</span>'
-        f'{source_chips(pages)}</div>'
-        '</article>'
-    )
-
-
-def flashcard(text, back=False):
-    card_class = "flashcard back" if back else "flashcard"
-    content = esc(text) if back else f"<b>{esc(text)}</b>"
-    return f'<div class="{card_class}">{content}</div>'
-
-
-def term_card(term, page, definition):
-    return (
-        f'<div class="term-card"><b>{esc(term)}</b> '
-        f'<span class="chip page-label">Page {esc(page)}</span><br>'
-        f'{esc(definition)}</div>'
-    )
-
-
-def terms_grid_start():
-    return '<div class="terms-grid">'
-
-
-def terms_grid_end():
-    return "</div>"
-
-
-def progress_metric(label, value, suffix=""):
-    value_markup = (
-        f'<strong class="metric-number">{esc(value)}'
-        f'<span>{esc(suffix)}</span></strong>'
-    )
-    return (
-        f'<div class="progress-metric"><span class="progress-metric-label">{esc(label)}</span>'
-        f'{value_markup}</div>'
-    )
-
-
-def quiz_chart(history):
-    if not history:
-        return ""
-    bars = []
-    for index, item in enumerate(history):
-        score = max(0, min(100, int(item["Score %"])))
-        bars.append(
-            f'<div class="chart-column" style="--bar-height: {score}%; '
-            f'--bar-index: {index};"><span class="chart-value">{score}%</span>'
-            f'<div class="chart-bar"></div><span class="chart-label">Quiz {item["Quiz"]}</span></div>'
-        )
-    return (
-        '<div class="quiz-chart"><div class="chart-y-axis">'
-        '<span>100</span><span>75</span><span>50</span><span>25</span><span>0</span>'
-        '</div><div class="chart-plot"><div class="chart-grid"></div>'
-        '<div class="chart-bars">' + "".join(bars) + "</div></div></div>"
-    )
+def page_info(page, hit_ranks):
+    if hit_ranks:
+        txt = f'<span style="color:var(--accent)">Retrieved for your last question (rank {", ".join(map(str, hit_ranks))})</span>'
+    else:
+        txt = "Not used for your last question"
+    return f'<div class="pageinfo"><b style="color:var(--fg)">Page {page}</b> · {txt}</div>'
 
 
 def footer():
     return '<div class="footer">StudySense · Built with RAG, Streamlit and Ollama</div>'
 
 
-def sidebar_wordmark():
-    return (
-        '<div class="sidebar-wordmark" aria-label="StudySense">'
-        '<span>Study</span><span class="wordmark-sense">Sense</span>'
-        '</div>'
-    )
+# ---------------------------------------------------------------- flashcards (self-contained, runs in an iframe)
+_FLASH = """<!doctype html><html><head><meta charset="utf-8">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
+:root{--bg:#0d1218;--surface2:#1b2631;--line:#293543;--fg:#e9eef3;--muted:#8c9cad;--accent:#4fc9bf;--ink:#06201e}
+*{box-sizing:border-box}body{margin:0;background:transparent;color:var(--fg);font-family:'IBM Plex Sans',system-ui,sans-serif;display:flex;flex-direction:column;gap:14px;padding:2px}
+.nav{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.mono{font:400 13px 'IBM Plex Mono',monospace}.hint{font-size:12px;color:var(--muted)}
+.bar{height:5px;border-radius:5px;background:var(--surface2);overflow:hidden}.bar i{display:block;height:100%;background:var(--accent);transition:width .4s}
+.fc{perspective:1400px;height:230px;cursor:pointer;outline:none}
+.fci{position:relative;height:100%;transition:transform .65s cubic-bezier(.2,.8,.2,1);transform-style:preserve-3d}
+.fc.flip .fci{transform:rotateY(180deg)}
+.face{position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden;border-radius:18px;display:grid;place-items:center;text-align:center;padding:40px 30px;font:700 clamp(1.15rem,2.6vw,1.65rem)/1.3 'Bricolage Grotesque',sans-serif}
+.face small{position:absolute;top:16px;left:20px;font:500 11px 'IBM Plex Mono',monospace;letter-spacing:.08em;text-transform:uppercase}
+.front{background:var(--surface2);border:1px solid var(--line)}.front small{color:var(--muted)}
+.back{background:var(--accent);color:var(--ink);transform:rotateY(180deg);font-weight:700}.back small{opacity:.7}
+.fc:focus-visible .face{outline:2px solid var(--fg)}
+.btns{display:flex;gap:10px;justify-content:space-between}
+button{font:500 14px 'IBM Plex Sans',sans-serif;color:var(--fg);background:transparent;border:1px solid var(--line);border-radius:10px;padding:10px 18px;cursor:pointer;min-height:44px;transition:all .2s;flex:1}
+button:hover{border-color:var(--accent);background:var(--surface2)}
+button.p{background:var(--accent);color:var(--ink);border:0;font-weight:600}button.p:hover{transform:translateY(-2px);background:var(--accent)}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style></head><body>
+<div class="nav"><span class="mono" id="cnt"></span><span class="hint">Click the card or press Space to flip. Arrow keys move between cards.</span></div>
+<div class="bar"><i id="bar"></i></div>
+<div class="fc" id="fc" tabindex="0" role="button" aria-label="Flashcard. Press to flip"><div class="fci">
+<div class="face front"><small>Question</small><span id="f"></span></div>
+<div class="face back"><small>Answer</small><span id="b"></span></div></div></div>
+<div class="btns"><button id="pv">Previous</button><button class="p" id="fl">Flip card</button><button id="nx">Next</button></div>
+<script>
+const D=__DATA__;let i=0;const $=id=>document.getElementById(id),fc=$('fc');
+function show(){const c=D[i];fc.classList.remove('flip');$('f').textContent=c.front;$('b').textContent=c.back;
+$('cnt').textContent='Card '+(i+1)+' of '+D.length+' · Page '+c.page;$('bar').style.width=((i+1)/D.length*100)+'%'}
+const flip=()=>fc.classList.toggle('flip');
+fc.onclick=flip;$('fl').onclick=flip;
+$('nx').onclick=()=>{i=(i+1)%D.length;show()};$('pv').onclick=()=>{i=(i-1+D.length)%D.length;show()};
+document.addEventListener('keydown',e=>{if(e.key===' '){e.preventDefault();flip()}else if(e.key==='ArrowRight')$('nx').click();else if(e.key==='ArrowLeft')$('pv').click()});
+show();
+</script></body></html>"""
 
 
-def document_card(file_name, file_size):
-    return (
-        '<div class="document-card">'
-        '<div class="pdf-icon">PDF</div>'
-        '<div class="document-details">'
-        f'<strong>{esc(file_name)}</strong>'
-        f'<span>{esc(file_size)}</span>'
-        '</div></div>'
-    )
-
-
-def indexing_ring(pages, chunks):
-    return (
-        f'<div class="indexing-summary" style="--target-pages: {int(pages)}; '
-        f'--target-chunks: {int(chunks)};">'
-        '<div class="progress-ring" style="--ring-progress: 100%; '
-        f'--target-pages: {int(pages)}; --target-chunks: {int(chunks)};">'
-        '<span class="ring-check">OK</span></div>'
-        '<div class="indexing-counts">'
-        f'<div><strong class="count-pages">{int(pages)}</strong><span>Pages</span></div>'
-        f'<div><strong class="count-chunks">{int(chunks)}</strong><span>Chunks</span></div>'
-        '</div></div>'
-    )
-
-
-def passages_pill(value):
-    return f'<span class="value-pill">{int(value)}</span>'
-
-
-def document_map(chunk_count, retrieved_indices=None, stage="idle"):
-    retrieved_indices = retrieved_indices or {}
-    chunks = []
-    for index in range(chunk_count):
-        rank = retrieved_indices.get(index)
-        classes = ["document-chunk"]
-        if stage == "search":
-            classes.append("chunk-searching")
-        if rank is not None:
-            classes.append("chunk-retrieved")
-        delay_ms = rank * 140 if rank is not None else index * 18
-        delay = f"animation-delay: {delay_ms}ms;"
-        label = f"<span>{rank}</span>" if rank is not None else ""
-        chunks.append(
-            f'<span class="{" ".join(classes)}" style="{delay}">{label}</span>'
-        )
-    return (
-        '<div class="document-map-wrap">'
-        '<div class="pipeline-label">DOCUMENT MAP</div>'
-        '<div class="document-map">' + "".join(chunks) + '</div>'
-        '</div>'
-    )
-
-
-def pipeline(stage="idle", retrieved_count=0):
-    steps = [
-        ("embed", "Embed the question"),
-        ("search", "Search the chunks"),
-        ("retrieve", "Retrieve the best passages"),
-        ("write", "Write the answer"),
-    ]
-    active_index = next((i for i, (key, _) in enumerate(steps) if key == stage), -1)
-    if stage == "done":
-        active_index = len(steps)
-    items = []
-    for index, (key, label) in enumerate(steps):
-        state = "complete" if index < active_index else "active" if index == active_index else ""
-        marker = "OK" if state == "complete" else str(index + 1)
-        items.append(
-            f'<div class="pipeline-step {state}">'
-            f'<span class="pipeline-marker">{marker}</span>'
-            f'<span>{label}</span></div>'
-        )
-    writing = (
-        '<div class="writing-indicator"><span class="dot"></span>'
-        '<span class="dot"></span><span class="dot"></span>'
-        '<span>Writing the answer</span></div>'
-        if stage == "write" else ""
-    )
-    retrieval = (
-        f'<div class="pipeline-count">{retrieved_count} passages retrieved</div>'
-        if retrieved_count else ""
-    )
-    return (
-        '<div class="pipeline-card"><div class="pipeline-label">LIVE PIPELINE</div>'
-        '<div class="pipeline-steps">' + "".join(items) + '</div>'
-        + retrieval + writing + '</div>'
-    )
+def flashcards_html(cards):
+    data = [{"front": str(c.get("front", "")), "back": str(c.get("back", "")), "page": str(c.get("page", "?"))} for c in cards]
+    payload = json.dumps(data).replace("</", "<\\/")
+    return _FLASH.replace("__DATA__", payload)

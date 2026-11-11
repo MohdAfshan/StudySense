@@ -1,67 +1,30 @@
-import html
+import os
+import re
 import tempfile
+import time
 
 import fitz  # PyMuPDF
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 
 import rag
+from components import ui
+from styles import inject_css
 
 st.set_page_config(page_title="StudySense", page_icon="📚", layout="wide")
-
-# ---------------------------------------------------------------- styling
-st.markdown("""
-<style>
-.hero {
-    background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 50%, #db2777 100%);
-    padding: 2rem 2.5rem; border-radius: 18px; color: white; margin-bottom: 1.2rem;
-}
-.hero h1 { margin: 0; font-size: 2.6rem; color: white; }
-.hero p { margin: 0.4rem 0 0 0; font-size: 1.1rem; opacity: 0.92; }
-.chip {
-    display: inline-block; background: #4f46e5; color: white;
-    padding: 3px 12px; border-radius: 999px; font-size: 0.85rem; margin-right: 6px;
-}
-.source-card {
-    background: #f9fafb; color: #374151; border: 1px solid #e5e7eb;
-    padding: 0.8rem 1rem; border-radius: 8px; margin-bottom: 0.5rem; font-size: 0.92rem;
-}
-.flashcard {
-    background: linear-gradient(135deg, #eef2ff, #fae8ff); color: #1f2937;
-    border: 2px solid #c4b5fd; border-radius: 16px; padding: 2.2rem 1.5rem;
-    text-align: center; font-size: 1.35rem; min-height: 150px; margin-bottom: 0.8rem;
-}
-.flashcard.back {
-    background: linear-gradient(135deg, #ecfdf5, #d1fae5); border-color: #6ee7b7;
-}
-.term-card {
-    background: #f5f3ff; color: #1f2937; border-left: 6px solid #7c3aed;
-    padding: 0.8rem 1.1rem; border-radius: 10px; margin-bottom: 0.6rem;
-}
-.feature-card {
-    border: 1px solid #c4b5fd; border-radius: 14px; padding: 1rem 1.2rem; height: 100%;
-}
-.footer { text-align: center; color: #9ca3af; margin-top: 3rem; font-size: 0.85rem; }
-</style>
-""", unsafe_allow_html=True)
-
-st.markdown("""
-<div class="hero">
-  <h1>📚 StudySense</h1>
-  <p>Your AI study partner. Upload a PDF, ask questions with page references,
-  get summaries, quizzes, flashcards and key terms.</p>
-</div>
-""", unsafe_allow_html=True)
+inject_css()
 
 
 # ---------------------------------------------------------------- state
 def fresh_state():
     return {
-        "loaded": None, "chunks": 0, "pages": 0, "pdf_path": None,
+        "loaded": None, "chunks": 0, "pages": 0, "pdf_path": None, "size_kb": None,
         "history": [], "asked": 0, "suggestions": [],
+        "hits": [], "pipe": -1, "boot_map": False,
         "summary": None,
         "quiz": [], "quiz_id": 0, "result": None, "quiz_history": [],
-        "cards": [], "card_i": 0, "show_back": False,
+        "cards": [],
         "terms": [],
     }
 
@@ -69,14 +32,8 @@ def fresh_state():
 for key, value in fresh_state().items():
     st.session_state.setdefault(key, value)
 
-
-def page_range_picker(container, key):
-    """Slider to limit a feature to some pages. Returns None for the whole document."""
-    pages = st.session_state["pages"]
-    if pages < 2:
-        return None
-    rng = container.slider("Page range", 1, pages, (1, pages), key=key)
-    return None if tuple(rng) == (1, pages) else tuple(rng)
+S = st.session_state
+SAMPLE = "sample.pdf"
 
 
 def show_error(e):
@@ -86,88 +43,78 @@ def show_error(e):
         st.code(msg[:1500])
 
 
-def esc(text):
-    return html.escape(str(text))
+def page_range_picker(container, key):
+    """Slider to limit a feature to some pages. Returns None for the whole document."""
+    pages = S["pages"]
+    if pages < 2:
+        return None
+    rng = container.slider("Page range", 1, pages, (1, pages), key=key)
+    return None if tuple(rng) == (1, pages) else tuple(rng)
+
+
+def handle_upload(name, data):
+    """Index a PDF. Same flow as before: ingest, reset state, remember the file."""
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as f:
+        f.write(data)
+        path = f.name
+    n = 0
+    with st.spinner("Reading and indexing your PDF..."):
+        try:
+            n = rag.ingest(path)
+        except Exception as e:
+            st.error(f"Could not read this PDF: {e}")
+    if n > 0:
+        S.update(fresh_state())
+        S.update(loaded=name, chunks=n, pages=rag.page_count, pdf_path=path,
+                 size_kb=len(data) / 1024, boot_map=True)
+        st.toast("PDF ready!", icon="✅")
+        st.rerun()
+    elif n == 0:
+        st.error("No readable text found. This may be a scanned PDF.")
+
+
+def use_sample():
+    with open(SAMPLE, "rb") as fh:
+        S["_sample_bytes"] = fh.read()
+    S["_sample_requested"] = True
 
 
 # ---------------------------------------------------------------- sidebar
 with st.sidebar:
-    st.header("📄 Your Document")
-    file = st.file_uploader("Upload a PDF", type="pdf")
+    st.markdown(ui.wordmark(), unsafe_allow_html=True)
+    st.markdown(ui.label("Your document"), unsafe_allow_html=True)
 
-    if file and st.session_state["loaded"] != file.name:
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as f:
-            f.write(file.getvalue())
-            path = f.name
-        n = 0
-        with st.spinner("Reading and indexing your PDF..."):
-            try:
-                n = rag.ingest(path)
-            except Exception as e:
-                st.error(f"Could not read this PDF: {e}")
-        if n > 0:
-            st.session_state.update(fresh_state())
-            st.session_state.update(loaded=file.name, chunks=n,
-                                    pages=rag.page_count, pdf_path=path)
-            st.toast("PDF ready!", icon="✅")
-        elif n == 0:
-            st.error("No readable text found. This may be a scanned PDF.")
+    if S["loaded"]:
+        st.markdown(ui.doc_card(S["loaded"], S["size_kb"]), unsafe_allow_html=True)
+        st.markdown(ui.ring_stats(S["pages"], S["chunks"]), unsafe_allow_html=True)
+        with st.expander("Replace document"):
+            side_file = st.file_uploader("Upload a PDF", type="pdf", key="side_up", label_visibility="collapsed")
+            if side_file and S["loaded"] != side_file.name:
+                handle_upload(side_file.name, side_file.getvalue())
+    else:
+        st.markdown(ui.empty_doc_card(), unsafe_allow_html=True)
 
-    if st.session_state["loaded"]:
-        st.markdown(f"**File:** {st.session_state['loaded']}")
-        c1, c2 = st.columns(2)
-        c1.metric("Pages", st.session_state["pages"])
-        c2.metric("Chunks", st.session_state["chunks"])
-
-    st.divider()
-    st.subheader("⚙️ Settings")
+    st.markdown(ui.label("Settings"), unsafe_allow_html=True)
     answer_style = st.selectbox("Answer style", list(rag.ANSWER_STYLES.keys()))
     top_k = st.slider("Passages to retrieve", 2, 8, 4,
                       help="How many chunks of the PDF are sent to the AI for each question.")
+    st.markdown('<div class="hint">More passages means more context for the model, but a slower answer.</div>',
+                unsafe_allow_html=True)
 
-    if st.session_state["loaded"]:
-        st.divider()
-        st.subheader("📊 Your session")
-        s1, s2 = st.columns(2)
-        s1.metric("Questions", st.session_state["asked"])
-        s2.metric("Quizzes", len(st.session_state["quiz_history"]))
-
-    st.divider()
-    st.markdown("**How it works**")
-    st.caption("1. PDF is split into chunks\n\n2. Chunks become embeddings\n\n"
-               "3. Best chunks are retrieved\n\n4. AI answers using only those chunks")
+    if S["loaded"]:
+        st.markdown(ui.label("How your answer is made"), unsafe_allow_html=True)
+        pipe_ph = st.empty()
+        pipe_ph.markdown(ui.pipeline(S["pipe"], S["chunks"], top_k), unsafe_allow_html=True)
+        st.markdown(ui.label("Your session"), unsafe_allow_html=True)
+        st.markdown(ui.session_stats(S["asked"], len(S["quiz_history"])), unsafe_allow_html=True)
 
 
 # ---------------------------------------------------------------- helpers
-def answer_question(q):
-    with st.spinner("Searching your document..."):
-        try:
-            ans, pages, sources = rag.ask(q, k=top_k, style=answer_style)
-            st.session_state["history"].insert(0, (q, ans, pages, sources))
-            st.session_state["asked"] += 1
-        except Exception as e:
-            show_error(e)
-
-
 def chat_as_text():
     lines = []
-    for q, a, p, _ in reversed(st.session_state["history"]):
+    for q, a, p, _ in reversed(S["history"]):
         lines.append(f"Q: {q}\nA: {a}\nPages: {p}\n")
     return "\n".join(lines)
-
-
-def next_card():
-    st.session_state["card_i"] = (st.session_state["card_i"] + 1) % len(st.session_state["cards"])
-    st.session_state["show_back"] = False
-
-
-def prev_card():
-    st.session_state["card_i"] = (st.session_state["card_i"] - 1) % len(st.session_state["cards"])
-    st.session_state["show_back"] = False
-
-
-def flip_card():
-    st.session_state["show_back"] = not st.session_state["show_back"]
 
 
 def compute_score(quiz, answers):
@@ -181,219 +128,275 @@ def render_page(path, page_no):
     return pix.tobytes("png")
 
 
-# ---------------------------------------------------------------- main area
-if not st.session_state["loaded"]:
-    st.info("👈 Upload a PDF from the sidebar to get started.")
-    cols = st.columns(5)
-    cards = [
-        ("💬 Ask", "Get answers with page references."),
-        ("📝 Summarize", "Short, detailed or exam-revision style."),
-        ("🎯 Quiz", "Choose difficulty and page range, get scored."),
-        ("🃏 Flashcards", "Flip cards to memorize key ideas."),
-        ("🔑 Key Terms", "A searchable glossary of the document."),
-    ]
-    for col, (title, desc) in zip(cols, cards):
-        col.markdown(f'<div class="feature-card"><b>{title}</b><br>{desc}</div>',
-                     unsafe_allow_html=True)
-else:
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
-        "💬 Ask", "📝 Summary", "🎯 Quiz", "🃏 Flashcards",
-        "🔑 Key Terms", "📄 Page Viewer", "📊 Progress"])
+def render_exchange(q, ans, pages, sources):
+    st.markdown(ui.question_block(q), unsafe_allow_html=True)
+    st.markdown(ui.answer_md(ans), unsafe_allow_html=True)
+    st.markdown(ui.source_chips(pages), unsafe_allow_html=True)
+    with st.expander("View source passages"):
+        st.markdown(ui.source_cards(sources), unsafe_allow_html=True)
 
-    # ============================================================ Ask
-    with tab1:
-        with st.form("ask_form", clear_on_submit=True):
-            q = st.text_input("Ask anything about your document",
-                              placeholder="e.g. What is overfitting?")
-            asked = st.form_submit_button("Ask 🔍")
-        if asked and q.strip():
-            answer_question(q.strip())
 
-        bc1, bc2, bc3 = st.columns([1, 1, 1])
-        if bc1.button("💡 Suggest questions"):
-            with st.spinner("Thinking of questions..."):
-                try:
-                    st.session_state["suggestions"] = rag.suggest_questions(5)
-                except Exception as e:
-                    show_error(e)
-        if st.session_state["history"]:
-            if bc2.button("🗑️ Clear chat"):
-                st.session_state["history"] = []
-                st.rerun()
-            bc3.download_button("⬇️ Download chat", chat_as_text(), file_name="studysense_chat.txt")
+# ================================================================ EMPTY STATE
+if not S["loaded"]:
+    left, right = st.columns([1.1, 1], gap="large")
+    with left:
+        st.markdown(ui.empty_headline(), unsafe_allow_html=True)
+    with right:
+        st.markdown(ui.drop_copy(), unsafe_allow_html=True)
+        with st.container(key="main_drop"):
+            main_file = st.file_uploader("Upload a PDF", type="pdf", key="main_up", label_visibility="collapsed")
+        if os.path.exists(SAMPLE):
+            st.button("Try sample.pdf", on_click=use_sample, type="primary", use_container_width=True)
+    st.markdown(ui.feature_cards(), unsafe_allow_html=True)
 
-        for idx, sq in enumerate(st.session_state["suggestions"]):
-            if st.button(f"❓ {sq}", key=f"sq{idx}"):
-                answer_question(sq)
+    if main_file and S["loaded"] != main_file.name:
+        handle_upload(main_file.name, main_file.getvalue())
+    if S.pop("_sample_requested", False):
+        handle_upload(SAMPLE, S.pop("_sample_bytes"))
+    st.markdown(ui.footer(), unsafe_allow_html=True)
+    st.stop()
 
-        for q_, ans_, pages_, sources_ in st.session_state["history"]:
-            with st.chat_message("user"):
-                st.write(q_)
-            with st.chat_message("assistant"):
-                st.markdown(ans_)
-                chips = "".join(f'<span class="chip">Page {p}</span>' for p in pages_)
-                st.markdown("**Sources:** " + chips, unsafe_allow_html=True)
-                with st.expander("📖 View source passages"):
-                    for text, meta in sources_:
-                        st.markdown(
-                            f'<div class="source-card"><b>Page {meta["page"]}</b><br>{esc(text)}</div>',
-                            unsafe_allow_html=True)
 
-    # ============================================================ Summary
-    with tab2:
-        s1, s2 = st.columns(2)
-        sum_style = s1.selectbox("Summary style", list(rag.SUMMARY_STYLES.keys()))
-        sum_range = page_range_picker(s2, "sum_range")
-        if st.button("✨ Generate Summary"):
-            with st.spinner("Summarizing..."):
-                try:
-                    st.session_state["summary"] = rag.summarize(sum_style, sum_range)
-                except Exception as e:
-                    show_error(e)
-        if st.session_state["summary"]:
-            st.markdown(st.session_state["summary"])
-            st.download_button("⬇️ Download summary", st.session_state["summary"],
-                               file_name="summary.txt")
+# ================================================================ HERO + DOCUMENT MAP
+status = (f"{len(S['hits'])} passages retrieved" if S["hits"]
+          else "Ask a question to see which pages are used")
+st.markdown(ui.hero(status), unsafe_allow_html=True)
+map_ph = st.empty()
+map_mode = "boot" if S["boot_map"] else "idle"
+S["boot_map"] = False
+map_ph.markdown(ui.docmap(S["pages"], S["chunks"], S["hits"], map_mode), unsafe_allow_html=True)
+st.write("")
 
-    # ============================================================ Quiz
-    with tab3:
-        qc1, qc2, qc3 = st.columns(3)
-        n_q = qc1.slider("Number of questions", 3, 10, 5)
-        difficulty = qc2.selectbox("Difficulty", ["Easy", "Medium", "Hard"], index=1)
-        quiz_range = page_range_picker(qc3, "quiz_range")
+tab_ask, tab_sum, tab_quiz, tab_cards, tab_terms, tab_view, tab_prog = st.tabs(
+    ["Ask", "Summary", "Quiz", "Flashcards", "Key Terms", "Page Viewer", "Progress"])
 
-        if st.button("🎲 Generate New Quiz"):
-            with st.spinner("Creating questions..."):
-                try:
-                    st.session_state["quiz"] = rag.generate_quiz(n_q, difficulty, quiz_range)
-                    st.session_state["quiz_id"] += 1
-                    st.session_state["result"] = None
-                    st.session_state["quiz_level"] = difficulty
-                except Exception as e:
-                    show_error(e)
 
-        quiz = st.session_state["quiz"]
-        if quiz:
-            qid = st.session_state["quiz_id"]
-            with st.form(f"quiz_form_{qid}"):
-                answers = []
-                for i, item in enumerate(quiz):
-                    st.markdown(f"**Q{i+1}. {item['question']}**")
-                    answers.append(st.radio("Choose one", item["options"],
-                                            key=f"q{qid}_{i}", index=None,
-                                            label_visibility="collapsed"))
-                    st.write("")
-                submitted = st.form_submit_button("Submit Answers ✅")
+# ---------------------------------------------------------------- Ask
+def run_ask(q):
+    """Visual sequence around the real rag.ask() call. Steps are timed for the eye;
+    the retrieved pages that light up are the ones rag.ask() really returned."""
+    live = live_ph.container()
+    with live:
+        st.markdown(ui.question_block(q), unsafe_allow_html=True)
+        body = st.empty()
 
-            if submitted:
-                st.session_state["result"] = answers
-                score = compute_score(quiz, answers)
-                st.session_state["quiz_history"].append({
-                    "Quiz": len(st.session_state["quiz_history"]) + 1,
-                    "Score": score, "Total": len(quiz),
-                    "Score %": round(100 * score / len(quiz)),
-                    "Difficulty": st.session_state.get("quiz_level", difficulty),
-                })
-                if score == len(quiz):
-                    st.balloons()
+    def pipe(n):
+        pipe_ph.markdown(ui.pipeline(n, S["chunks"], top_k), unsafe_allow_html=True)
 
-            if st.session_state["result"] is not None:
-                result = st.session_state["result"]
-                score = compute_score(quiz, result)
-                st.markdown(f"## 🏆 Score: {score} / {len(quiz)}")
-                st.progress(score / len(quiz))
-                for i, item in enumerate(quiz):
-                    chosen = result[i]
-                    if chosen == item["answer"]:
-                        st.success(f"Q{i+1}: Correct ✅ (Page {item['page']})")
-                    else:
-                        shown = chosen if chosen else "Not answered"
-                        st.error(f"Q{i+1}: Wrong ❌ You chose: {shown}\n\n"
-                                 f"Correct answer: {item['answer']} (Page {item['page']})")
-                    if item["explanation"]:
-                        st.caption(f"💡 {item['explanation']}")
+    body.markdown(ui.thinking("Embedding your question"), unsafe_allow_html=True)
+    pipe(0)
+    time.sleep(0.6)
+    pipe(1)
+    body.markdown(ui.thinking(f"Searching {S['chunks']} chunks"), unsafe_allow_html=True)
+    map_ph.markdown(ui.docmap(S["pages"], S["chunks"], [], "searching"), unsafe_allow_html=True)
+    time.sleep(1.0)
+    pipe(2)
+    body.markdown(ui.thinking("Retrieving passages and writing the answer"), unsafe_allow_html=True)
+    try:
+        ans, pages, sources = rag.ask(q, k=top_k, style=answer_style)
+    except Exception as e:
+        live_ph.empty()
+        pipe(S["pipe"])
+        map_ph.markdown(ui.docmap(S["pages"], S["chunks"], S["hits"]), unsafe_allow_html=True)
+        show_error(e)
+        return
 
-    # ============================================================ Flashcards
-    with tab4:
-        f1, f2 = st.columns(2)
-        n_cards = f1.slider("Number of flashcards", 4, 15, 8)
-        card_range = page_range_picker(f2, "card_range")
-        if st.button("🃏 Generate Flashcards"):
-            with st.spinner("Making flashcards..."):
-                try:
-                    st.session_state["cards"] = rag.generate_flashcards(n_cards, card_range)
-                    st.session_state["card_i"] = 0
-                    st.session_state["show_back"] = False
-                except Exception as e:
-                    show_error(e)
-
-        cards = st.session_state["cards"]
-        if cards:
-            i = st.session_state["card_i"]
-            card = cards[i]
-            st.caption(f"Card {i + 1} of {len(cards)}  ·  Page {card['page']}")
-            if st.session_state["show_back"]:
-                st.markdown(f'<div class="flashcard back">{esc(card["back"])}</div>',
-                            unsafe_allow_html=True)
-            else:
-                st.markdown(f'<div class="flashcard"><b>{esc(card["front"])}</b></div>',
-                            unsafe_allow_html=True)
-            b1, b2, b3 = st.columns(3)
-            b1.button("⬅️ Previous", on_click=prev_card, use_container_width=True)
-            b2.button("🔄 Flip card", on_click=flip_card, use_container_width=True)
-            b3.button("Next ➡️", on_click=next_card, use_container_width=True)
-
-    # ============================================================ Key terms
-    with tab5:
-        n_terms = st.slider("Number of terms", 5, 20, 10)
-        if st.button("🔑 Extract Key Terms"):
-            with st.spinner("Finding key terms..."):
-                try:
-                    st.session_state["terms"] = rag.key_terms(n_terms)
-                except Exception as e:
-                    show_error(e)
-
-        terms = st.session_state["terms"]
-        if terms:
-            search = st.text_input("🔎 Search terms", placeholder="type to filter...")
-            shown = [t for t in terms
-                     if search.lower() in t["term"].lower() or search.lower() in t["definition"].lower()]
-            for t in shown:
-                st.markdown(
-                    f'<div class="term-card"><b>{esc(t["term"])}</b> '
-                    f'<span class="chip">Page {esc(t["page"])}</span><br>{esc(t["definition"])}</div>',
-                    unsafe_allow_html=True)
-            glossary = "\n".join(f"{t['term']} (Page {t['page']}): {t['definition']}" for t in terms)
-            st.download_button("⬇️ Download glossary", glossary, file_name="glossary.txt")
-
-    # ============================================================ Page viewer
-    with tab6:
-        st.caption("Check any page of your PDF, for example to verify the sources the AI cited.")
-        total = st.session_state["pages"]
-        page_no = st.number_input("Page number", min_value=1, max_value=max(total, 1), value=1, step=1)
+    hits = []
+    for _, meta in sources:
         try:
-            st.image(render_page(st.session_state["pdf_path"], int(page_no)), width=650)
+            hits.append(int(meta["page"]))
+        except (KeyError, TypeError, ValueError):
+            pass
+    for n in range(1, len(hits) + 1):  # light up the real retrieved chunks, one by one
+        map_ph.markdown(ui.docmap(S["pages"], S["chunks"], hits[:n]), unsafe_allow_html=True)
+        time.sleep(0.25)
+    pipe(3)
+    tokens = re.split(r"(\s+)", ans)
+    step = 3
+    pause = min(0.03, 3.0 / max(1, len(tokens) // step))
+    for i in range(step, len(tokens) + step, step):
+        body.markdown(ui.answer_md("".join(tokens[:i])), unsafe_allow_html=True)
+        time.sleep(pause)
+
+    S["history"].insert(0, (q, ans, pages, sources))
+    S["asked"] += 1
+    S["hits"] = hits
+    S["pipe"] = 4
+    st.rerun()
+
+
+def queue_question(text):
+    S["pending_q"] = text
+
+
+with tab_ask:
+    with st.form("ask_form", clear_on_submit=True):
+        fc1, fc2 = st.columns([6, 1], vertical_alignment="bottom")
+        q = fc1.text_input("Ask anything about your document",
+                           placeholder="e.g. What is overfitting?", label_visibility="collapsed")
+        asked = fc2.form_submit_button("Ask", type="primary", use_container_width=True)
+
+    b1, b2, b3, _sp = st.columns([1.1, 1, 1.1, 3])
+    if b1.button("Suggest questions", use_container_width=True):
+        with st.spinner("Thinking of questions..."):
+            try:
+                S["suggestions"] = rag.suggest_questions(5)
+            except Exception as e:
+                show_error(e)
+    if S["history"]:
+        if b2.button("Clear chat", use_container_width=True):
+            S["history"] = []
+            S["hits"] = []
+            S["pipe"] = -1
+            st.rerun()
+        b3.download_button("Download chat", chat_as_text(), file_name="studysense_chat.txt",
+                           use_container_width=True)
+
+    if S["suggestions"]:
+        with st.container(key="sugg"):
+            for idx, sq in enumerate(S["suggestions"]):
+                st.button(sq, key=f"sq{idx}", on_click=queue_question, args=(sq,))
+
+    live_ph = st.empty()
+    for q_, ans_, pages_, sources_ in S["history"]:
+        render_exchange(q_, ans_, pages_, sources_)
+
+    pending = S.pop("pending_q", None)
+    if asked and q.strip():
+        run_ask(q.strip())
+    elif pending:
+        run_ask(pending)
+
+
+# ---------------------------------------------------------------- Summary
+with tab_sum:
+    s1, s2, s3 = st.columns([1, 1, 1], vertical_alignment="bottom")
+    sum_style = s1.selectbox("Summary style", list(rag.SUMMARY_STYLES.keys()))
+    sum_range = page_range_picker(s2, "sum_range")
+    if s3.button("Generate summary", type="primary"):
+        with st.spinner("Summarizing..."):
+            try:
+                S["summary"] = rag.summarize(sum_style, sum_range)
+            except Exception as e:
+                show_error(e)
+    if S["summary"]:
+        with st.container(border=True):
+            st.markdown(ui.answer_md(S["summary"]), unsafe_allow_html=True)
+        st.download_button("Download summary", S["summary"], file_name="summary.txt")
+
+
+# ---------------------------------------------------------------- Quiz
+with tab_quiz:
+    qc1, qc2, qc3, qc4 = st.columns([1, 1, 1, 1], vertical_alignment="bottom")
+    n_q = qc1.slider("Number of questions", 3, 10, 5)
+    difficulty = qc2.selectbox("Difficulty", ["Easy", "Medium", "Hard"], index=1)
+    quiz_range = page_range_picker(qc3, "quiz_range")
+    if qc4.button("Generate new quiz", type="primary"):
+        with st.spinner("Creating questions..."):
+            try:
+                S["quiz"] = rag.generate_quiz(n_q, difficulty, quiz_range)
+                S["quiz_id"] += 1
+                S["result"] = None
+                S["quiz_level"] = difficulty
+            except Exception as e:
+                show_error(e)
+
+    quiz = S["quiz"]
+    if quiz:
+        qid = S["quiz_id"]
+        with st.form(f"quiz_form_{qid}", border=False):
+            answers = []
+            for i, item in enumerate(quiz):
+                with st.container(border=True):
+                    st.markdown(ui.quiz_head(i, item), unsafe_allow_html=True)
+                    answers.append(st.radio("Choose one", item["options"], key=f"q{qid}_{i}",
+                                            index=None, label_visibility="collapsed"))
+            submitted = st.form_submit_button("Submit answers", type="primary")
+        if submitted:
+            S["result"] = answers
+            score = compute_score(quiz, answers)
+            S["quiz_history"].append({
+                "Quiz": len(S["quiz_history"]) + 1, "Score": score, "Total": len(quiz),
+                "Score %": round(100 * score / len(quiz)),
+                "Difficulty": S.get("quiz_level", difficulty),
+            })
+            if score == len(quiz):
+                st.balloons()
+        if S["result"] is not None:
+            result = S["result"]
+            st.markdown(ui.quiz_result(compute_score(quiz, result), len(quiz), quiz, result),
+                        unsafe_allow_html=True)
+    else:
+        st.markdown('<div class="hint" style="margin-top:12px">Choose a difficulty and generate a quiz from your document.</div>',
+                    unsafe_allow_html=True)
+
+
+# ---------------------------------------------------------------- Flashcards
+with tab_cards:
+    f1, f2, f3 = st.columns([1, 1, 1], vertical_alignment="bottom")
+    n_cards = f1.slider("Number of flashcards", 4, 15, 8)
+    card_range = page_range_picker(f2, "card_range")
+    if f3.button("Generate flashcards", type="primary"):
+        with st.spinner("Making flashcards..."):
+            try:
+                S["cards"] = rag.generate_flashcards(n_cards, card_range)
+            except Exception as e:
+                show_error(e)
+    if S["cards"]:
+        st.write("")
+        components.html(ui.flashcards_html(S["cards"]), height=400)
+
+
+# ---------------------------------------------------------------- Key terms
+with tab_terms:
+    t1, t2 = st.columns([1, 1], vertical_alignment="bottom")
+    n_terms = t1.slider("Number of terms", 5, 20, 10)
+    if t2.button("Extract key terms", type="primary"):
+        with st.spinner("Finding key terms..."):
+            try:
+                S["terms"] = rag.key_terms(n_terms)
+            except Exception as e:
+                show_error(e)
+    terms = S["terms"]
+    if terms:
+        search = st.text_input("Search terms", placeholder="type to filter...").lower()
+        shown = [t for t in terms if search in t["term"].lower() or search in t["definition"].lower()]
+        st.markdown(ui.term_cards(shown), unsafe_allow_html=True)
+        glossary = "\n".join(f"{t['term']} (Page {t['page']}): {t['definition']}" for t in terms)
+        st.download_button("Download glossary", glossary, file_name="glossary.txt")
+
+
+# ---------------------------------------------------------------- Page viewer
+with tab_view:
+    st.caption("Check any page of your PDF, for example to verify the sources the AI cited.")
+    total = S["pages"]
+    vleft, vright = st.columns([1.3, 1], gap="large")
+    with vright:
+        page_no = st.number_input("Page number", min_value=1, max_value=max(total, 1), value=1, step=1)
+        ranks = [i + 1 for i, p in enumerate(S["hits"]) if p == int(page_no)]
+        st.markdown(ui.page_info(int(page_no), ranks), unsafe_allow_html=True)
+    with vleft:
+        try:
+            st.image(render_page(S["pdf_path"], int(page_no)), use_container_width=True)
         except Exception as e:
             st.error(f"Could not display this page: {e}")
 
-    # ============================================================ Progress
-    with tab7:
-        hist = st.session_state["quiz_history"]
-        m1, m2, m3, m4 = st.columns(4)
-        m1.metric("Questions asked", st.session_state["asked"])
-        m2.metric("Quizzes taken", len(hist))
-        if hist:
-            avg = sum(h["Score %"] for h in hist) / len(hist)
-            m3.metric("Average score", f"{avg:.0f}%")
-            m4.metric("Best score", f"{max(h['Score %'] for h in hist)}%")
-            df = pd.DataFrame(hist)
-            st.markdown("#### Quiz scores")
-            st.bar_chart(df.set_index("Quiz")["Score %"])
-            st.dataframe(df, hide_index=True)
-        else:
-            m3.metric("Average score", "-")
-            m4.metric("Best score", "-")
-            st.info("Take a quiz and your scores will appear here.")
 
-st.markdown('<div class="footer">StudySense · Built with RAG, Streamlit and Ollama</div>',
-            unsafe_allow_html=True)
+# ---------------------------------------------------------------- Progress
+with tab_prog:
+    hist = S["quiz_history"]
+    if hist:
+        avg = f"{sum(h['Score %'] for h in hist) / len(hist):.0f}%"
+        best = f"{max(h['Score %'] for h in hist)}%"
+    else:
+        avg = best = "-"
+    st.markdown(ui.metrics(S["asked"], len(hist), avg, best), unsafe_allow_html=True)
+    if hist:
+        st.markdown(ui.bar_chart([h["Score %"] for h in hist]), unsafe_allow_html=True)
+        with st.expander("Quiz history"):
+            st.dataframe(pd.DataFrame(hist), hide_index=True, use_container_width=True)
+    else:
+        st.markdown('<div class="hint" style="margin-top:14px">Take a quiz and your scores will appear here.</div>',
+                    unsafe_allow_html=True)
+
+st.markdown(ui.footer(), unsafe_allow_html=True)

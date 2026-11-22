@@ -137,10 +137,25 @@ def _as_text(chunks):
 
 def _parse_json_list(raw):
     raw = raw.replace("```json", "").replace("```", "").strip()
-    start, end = raw.find("["), raw.rfind("]")
-    if start == -1 or end == -1:
+    decoder = json.JSONDecoder()
+    items, i = [], 0
+    while i < len(raw):
+        if raw[i] in "[{":
+            try:
+                obj, end = decoder.raw_decode(raw[i:])
+            except json.JSONDecodeError:
+                i += 1
+                continue
+            if isinstance(obj, list):
+                items.extend(x for x in obj if isinstance(x, dict))
+            elif isinstance(obj, dict):
+                items.append(obj)
+            i += end
+        else:
+            i += 1
+    if not items:
         raise ValueError("No JSON list found")
-    return json.loads(raw[start:end + 1])
+    return items
 
 
 def _json_call(prompt, tries=2):
